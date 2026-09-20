@@ -154,8 +154,8 @@ class DeliverTest(unittest.TestCase):
         self.assertEqual(out.cli, "claude")
         self.assertEqual(fake.subcommands(), ["pane list", "agent prompt"])
         # TARGET 是 pane_id；正文只加来源前缀（协议，不翻译），原文一个字不改、不加 from:
-        self.assertEqual(inject.REMOTE_PREFIX, "[agent-ntfy remote] ")
-        self.assertEqual(fake.calls[1], ["herdr", "agent", "prompt", "wD:p1", "[agent-ntfy remote] " + TEXT])
+        self.assertEqual(inject.REMOTE_PREFIX, "[ntfy-connector remote] ")
+        self.assertEqual(fake.calls[1], ["herdr", "agent", "prompt", "wD:p1", "[ntfy-connector remote] " + TEXT])
         self.assertEqual(fake.calls[1][4], inject.REMOTE_PREFIX + TEXT)
 
     def test_kimi_gets_prompt_then_ctrl_s_in_that_order(self):
@@ -261,14 +261,14 @@ class PaneHelpersTest(unittest.TestCase):
 
 class ControlMarkTest(unittest.TestCase):
     def test_mark_roundtrip(self):
-        self.assertEqual(inject.control_mark("release", "slot3"), "__agent-ntfy:release:slot3__")
-        self.assertEqual(inject.parse_control_mark("__agent-ntfy:release:slot3__"), ("release", "slot3"))
-        self.assertEqual(inject.parse_control_mark("__agent-ntfy:ignore:slot12__"), ("ignore", "slot12"))
+        self.assertEqual(inject.control_mark("release", "slot3"), "__ntfy-connector:release:slot3__")
+        self.assertEqual(inject.parse_control_mark("__ntfy-connector:release:slot3__"), ("release", "slot3"))
+        self.assertEqual(inject.parse_control_mark("__ntfy-connector:ignore:slot12__"), ("ignore", "slot12"))
 
     def test_only_exact_form_is_a_mark(self):
-        for text in ("__agent-ntfy:release:slot3__\n", " __agent-ntfy:release:slot3__", "请 __agent-ntfy:release:slot3__",
-                     "__agent-ntfy:delete:slot3__", "__agent-ntfy:release:slot__", "__agent-ntfy:release:slot0__",
-                     "__agent-ntfy:release:__", "agent-ntfy:release:slot3", "", "释放这个槽位"):
+        for text in ("__ntfy-connector:release:slot3__\n", " __ntfy-connector:release:slot3__", "请 __ntfy-connector:release:slot3__",
+                     "__ntfy-connector:delete:slot3__", "__ntfy-connector:release:slot__", "__ntfy-connector:release:slot0__",
+                     "__ntfy-connector:release:__", "ntfy-connector:release:slot3", "", "释放这个槽位"):
             self.assertIsNone(inject.parse_control_mark(text), text)
 
     def test_unknown_action_cannot_be_built(self):
@@ -284,7 +284,7 @@ class ReceiptTest(unittest.TestCase):
         r = inject.render_receipt("slot3", out, reply_url=self.URL)
         self.assertEqual(r.title, "[slot3] 消息未送达")
         self.assertEqual([a["label"] for a in r.actions], [Z("receipt.button.release"), Z("receipt.button.ignore")])
-        self.assertEqual([a["body"] for a in r.actions], ["__agent-ntfy:release:slot3__", "__agent-ntfy:ignore:slot3__"])
+        self.assertEqual([a["body"] for a in r.actions], ["__ntfy-connector:release:slot3__", "__ntfy-connector:ignore:slot3__"])
         self.assertTrue(all(a["url"] == self.URL and a["action"] == "http" for a in r.actions))
         # 正文首行（原因）加粗，尾句另起一段（Markdown 下单个换行会折成空格）
         self.assertEqual(r.message, f"**{out.detail}**\n\n" + Z("receipt.not_delivered"))
@@ -315,7 +315,7 @@ class ReceiptTest(unittest.TestCase):
         self.assertEqual(r.title, "[slot3] 消息未送达")
         self.assertEqual(r.message, "**daemon 正在停止，你刚才的消息未送达，请稍后再发。**")
         self.assertEqual([a["label"] for a in r.actions], [Z("receipt.button.ignore")])
-        self.assertEqual(r.actions[0]["body"], "__agent-ntfy:ignore:slot3__")
+        self.assertEqual(r.actions[0]["body"], "__ntfy-connector:ignore:slot3__")
         r2 = inject.render_stopping_receipt("slot3", reply_url=self.URL, lang="zh", uncertain=True)
         self.assertEqual(r2.title, "[slot3] 消息可能未送达")
         self.assertIn("无法确认", r2.message)
@@ -348,15 +348,15 @@ class ConfirmRequestTest(unittest.TestCase):
     URL = "https://ntfy.example/t"
 
     def test_confirmed_is_a_control_mark(self):
-        self.assertEqual(inject.control_mark("confirmed", "slot3"), "__agent-ntfy:confirmed:slot3__")
-        self.assertEqual(inject.parse_control_mark("__agent-ntfy:confirmed:slot3__"), ("confirmed", "slot3"))
-        self.assertIsNone(inject.parse_control_mark("__agent-ntfy:confirmed:slot3__ 收到"))
+        self.assertEqual(inject.control_mark("confirmed", "slot3"), "__ntfy-connector:confirmed:slot3__")
+        self.assertEqual(inject.parse_control_mark("__ntfy-connector:confirmed:slot3__"), ("confirmed", "slot3"))
+        self.assertIsNone(inject.parse_control_mark("__ntfy-connector:confirmed:slot3__ 收到"))
 
     def test_confirm_request_has_one_button_and_explains_itself(self):
         r = inject.render_confirm_request("slot3", reply_url=self.URL, lang="zh")
         self.assertEqual(r.title, "[slot3] 确认你能收到通知")
         self.assertEqual([a["label"] for a in r.actions], [Z("confirm.button")])
-        self.assertEqual(r.actions[0]["body"], "__agent-ntfy:confirmed:slot3__")
+        self.assertEqual(r.actions[0]["body"], "__ntfy-connector:confirmed:slot3__")
         self.assertEqual(r.actions[0]["url"], self.URL)
         # 写给没看过任何文档的人：这条是什么、点按钮意味着什么、没弹通知怎么办
         self.assertIn("slot3", r.message)

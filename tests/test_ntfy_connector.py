@@ -539,7 +539,7 @@ class ConfirmSubTest(unittest.TestCase):
         self.assertNotIn(Z("cli.confirm.pane_kept"), out + out2)
         self.assertNotIn(["pane", "close"], [c[1:3] for c in fake.calls])
 
-    # --report-to <窗格>：结束时把结果（带 [agent-ntfy] 前缀）注入回那个窗格的 agent；先报再问关；注入失败不改退出码
+    # --report-to <窗格>：结束时把结果（带 [ntfy-connector] 前缀）注入回那个窗格的 agent；先报再问关；注入失败不改退出码
     def test_report_to_injects_confirmed_result_before_close_prompt(self):
         h = Harness(self, subscribed=())
         self.click_when_sent(h, "slot4")
@@ -549,20 +549,20 @@ class ConfirmSubTest(unittest.TestCase):
         self.assertEqual(subs, [["pane", "list"], ["agent", "prompt"], ["pane", "close"]])  # 先回报、后关窗格
         prompt = fake.calls[1]
         self.assertEqual(prompt[3], "wD:p1")
-        self.assertEqual(prompt[4], "[agent-ntfy] " + Z("cli.confirm.report.confirmed", slot="slot4"))
+        self.assertEqual(prompt[4], "[ntfy-connector] " + Z("cli.confirm.report.confirmed", slot="slot4"))
         self.assertNotIn(Z("cli.confirm.done_prompt", slot="slot4"), out)  # 有窗格替他回报，不再要用户转达
 
     def test_report_to_injects_timeout_and_cancel(self):
         h = Harness(self, subscribed=())
         code, out, err, fake = self._confirm_on_tty(h, ["--home", str(h.home), "confirm-sub", "slot4", "--timeout", "0.5", "--report-to", "wD:p1"], "\n")
         self.assertEqual(code, 2, err)
-        self.assertEqual(fake.calls[-1][4], "[agent-ntfy] " + Z("cli.confirm.report.timeout", slot="slot4"))
+        self.assertEqual(fake.calls[-1][4], "[ntfy-connector] " + Z("cli.confirm.report.timeout", slot="slot4"))
         h2 = Harness(self, subscribed=())
         fake2 = FakeHerdr()
         with mock.patch("ntfy_connector.herdr_run", fake2), mock.patch("ntfy_connector.send_request", side_effect=KeyboardInterrupt):
             code2, out2, err2 = self.run_on_tty(["--home", str(h2.home), "confirm-sub", "slot4", "--timeout", "5", "--report-to", "wD:p1"], stdin_text="\n", env=HERDR)
         self.assertEqual(code2, 130)
-        self.assertEqual(fake2.calls[-1][4], "[agent-ntfy] " + Z("cli.confirm.report.cancelled", slot="slot4"))
+        self.assertEqual(fake2.calls[-1][4], "[ntfy-connector] " + Z("cli.confirm.report.cancelled", slot="slot4"))
 
     def test_report_to_failure_is_a_warning_only(self):
         h = Harness(self, subscribed=())

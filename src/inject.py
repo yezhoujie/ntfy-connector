@@ -1,6 +1,6 @@
 """注入层：把用户从手机发来的话送进目标 agent 的窗格；送不到时说清为什么。
 
-    手机 → topic → daemon（无 pending）→ deliver() ──herdr agent prompt <pane_id> '[agent-ntfy remote] <原文>'──▶ 目标 agent
+    手机 → topic → daemon（无 pending）→ deliver() ──herdr agent prompt <pane_id> '[ntfy-connector remote] <原文>'──▶ 目标 agent
                                               └─ 送不到 → 回执（[<slot>] 消息未送达 + 控制按钮）→ 手机
 
 只做通路：只加来源前缀（REMOTE_PREFIX，让 agent 知道这条来自远程通道），原文本身一个字不改、不判断目标忙不忙
@@ -41,8 +41,8 @@ from ntfyclient import http_action
 from render import SEPARATOR, Rendered, bold_first_line
 
 HERDR = "herdr"
-REMOTE_PREFIX = "[agent-ntfy remote] "  # 注入正文前的来源标记（协议）：这条来自用户的手机
-SYSTEM_PREFIX = "[agent-ntfy] "  # 系统事件的来源标记（协议）：不是用户说的，是 CLI / daemon 在报告结果（如确认窗格的结果）
+REMOTE_PREFIX = "[ntfy-connector remote] "  # 注入正文前的来源标记（协议）：这条来自用户的手机
+SYSTEM_PREFIX = "[ntfy-connector] "  # 系统事件的来源标记（协议）：不是用户说的，是 CLI / daemon 在报告结果（如确认窗格的结果）
 # 三条命令都是本机 unix socket IPC，实测毫秒级返回；prompt 不带 --wait，提交即返回、不追踪回合。
 # 15 秒够熬过机器卡顿，又不至于让工作线程被一条投递挂死。
 HERDR_TIMEOUT = 15.0
@@ -57,7 +57,7 @@ UNCERTAIN_REASONS = ("prompt_timeout", "wake_failed", "error")
 MARK_ACTIONS = ("release", "ignore", "confirmed")  # 回执的两个按钮 + 可达性确认的「我收到了」
 # 只认这一个精确形态（fullmatch），且槽位名要与消息所在的槽位相同——由调用方核；不匹配就是普通消息。
 # 这是「通路不解释内容」的唯一例外：认自己生成的固定标记可以，解析用户自由输入的文本不行。
-MARK_RE = re.compile(r"__agent-ntfy:(release|ignore|confirmed):(slot[1-9][0-9]*)__")
+MARK_RE = re.compile(r"__ntfy-connector:(release|ignore|confirmed):(slot[1-9][0-9]*)__")
 
 
 LOG = logging.getLogger("agent-ntfy.inject")
@@ -225,7 +225,7 @@ def deliver(slot: str, pane: str | None, text: str, *, run: Runner, lang: str) -
 def control_mark(action: str, slot: str) -> str:
     if action not in MARK_ACTIONS:
         raise ValueError(f"没有这种控制动作：{action!r}")
-    return f"__agent-ntfy:{action}:{slot}__"
+    return f"__ntfy-connector:{action}:{slot}__"
 
 
 def parse_control_mark(text: str) -> tuple[str, str] | None:

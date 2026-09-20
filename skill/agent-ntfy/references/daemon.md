@@ -178,8 +178,8 @@ agent-ntfy: test notification sent — tap “Got it” in the phone's notificat
   the wording there. Only a daemon you start by hand in a pane inherits that pane's shell environment.
 - A pane opened by `away on` / a non-TTY `confirm-sub` runs `confirm-sub … --close-pane --report-to <opener pane>`:
   when the check ends (confirmed / timed out / interrupted / failed) it injects one line into the agent in the
-  pane that opened it — `herdr agent prompt <pane> "[agent-ntfy] slotN is confirmed …"` (the `[agent-ntfy] `
-  prefix marks a system event, as opposed to `[agent-ntfy remote] ` for the user's phone messages; a kimi
+  pane that opened it — `herdr agent prompt <pane> "[ntfy-connector] slotN is confirmed …"` (the `[ntfy-connector] `
+  prefix marks a system event, as opposed to `[ntfy-connector remote] ` for the user's phone messages; a kimi
   target is woken the same way as for phone messages) — then, after a success, asks `Close this pane? [Y/n]`
   and closes itself (`herdr pane close`) on Enter or `y`; after a failure or timeout it stays open so the
   reason can be read. If the injection fails it prints one stderr line and keeps the exit code. Closing the
@@ -192,7 +192,7 @@ agent-ntfy: test notification sent — tap “Got it” in the phone's notificat
 ## 6. Messages from the phone when no question is pending
 
 The daemon looks up the slot's lease and injects the text into the recorded pane as one line,
-`[agent-ntfy remote] <text as typed>` (`herdr agent prompt <pane id>`; for a kimi target it also sends
+`[ntfy-connector remote] <text as typed>` (`herdr agent prompt <pane id>`; for a kimi target it also sends
 `ctrl+s` to wake it). The prefix is protocol and never translated; the text after it is the human's,
 unchanged. The daemon does not check whether the target is busy; your CLI queues input on its own. It
 does check that the pane still exists.
@@ -261,5 +261,5 @@ updates) → `--lang` on the command line → `NTFY_CONNECTOR_LANG` → the syst
 `LANG` starting with `zh`, or a Chinese Windows locale, gives `zh`) → `en`. Everything below the JSON field
 (receipts, confirmation messages, CLI output, validation reports, `--help`) is resolved once when the process
 starts; panes and daemons the CLI starts for you receive that value via `--lang`. A card keeps the language it was sent in even if the environment changes later. Control markers,
-the `[tag]` prefix and the `[agent-ntfy remote] ` / `[agent-ntfy] ` injection prefixes are protocol, not wording, and never
+the `[tag]` prefix and the `[ntfy-connector remote] ` / `[ntfy-connector] ` injection prefixes are protocol, not wording, and never
 change.

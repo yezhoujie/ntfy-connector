@@ -5,7 +5,7 @@
 
 语言由调用方显式传，本模块不读环境变量。解析只在两处发生：ask 入口（JSON lang 压过进程语言）与
 daemon / CLI 进程入口（--lang → NTFY_CONNECTOR_LANG → 系统 locale → en），深层模块只认传进来的 lang。
-控制标记（__agent-ntfy:…__）与 Title 里的 [<tag>] 是协议，不在表里、不翻译。
+控制标记（__ntfy-connector:…__）与 Title 里的 [<tag>] 是协议，不在表里、不翻译。
 """
 
 LANGS = ("zh", "en")
@@ -173,7 +173,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.away.confirm_pane": ("远程交互模式已开启，但槽位 {slot} 还要过一次可达性闸：已在 herdr 窗格 {pane} 里开始确认。请转告用户：\n"
                                   "  1. 看窗格 {pane}，在手机 ntfy app 里订阅它显示的 topic\n"
                                   "  2. 订阅好后在该窗格按回车，会收到一条带按钮的测试通知\n"
-                                  "  3. 在手机通知栏点按钮——结果会以一行 [agent-ntfy] slotN 已过闸 / 超时 / 被中断 注入你的会话，不必轮询 slots\n"
+                                  "  3. 在手机通知栏点按钮——结果会以一行 [ntfy-connector] slotN 已过闸 / 超时 / 被中断 注入你的会话，不必轮询 slots\n"
                                   "  ⚠️ 按回车、点按钮之前别关那个窗格（关了确认就取消，且不会有结果送回）；成功后窗格会问要不要关掉"),
         "cli.away.confirming": ("远程交互模式已开启；槽位 {slot} 正在确认中（已有一个确认窗格打开）：\n"
                                 "  让用户去那个窗格完成订阅并按回车，再在手机通知栏点按钮"),
@@ -235,7 +235,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.confirm.pane_opened": ("已在 herdr 窗格 {pane} 里开始 {slot} 的可达性确认。请转告用户：\n"
                                     "  1. 看窗格 {pane}，在手机 ntfy app 里订阅它显示的 topic\n"
                                     "  2. 订阅好后在该窗格按回车，会收到一条带按钮的测试通知\n"
-                                    "  3. 在手机通知栏点按钮——结果会以一行 [agent-ntfy] slotN 已过闸 / 超时 / 被中断 注入你的会话，不必轮询 slots\n"
+                                    "  3. 在手机通知栏点按钮——结果会以一行 [ntfy-connector] slotN 已过闸 / 超时 / 被中断 注入你的会话，不必轮询 slots\n"
                                     "  ⚠️ 按回车、点按钮之前别关那个窗格（关了确认就取消，且不会有结果送回）；成功后窗格会问要不要关掉"),
         "cli.add_slot.done": "已新建 {slot}（还没确认过手机收得到通知）。下一步：在你自己的终端跑  agent-ntfy confirm-sub {slot}",
         "cli.status.not_running": "daemon：未运行",
@@ -513,7 +513,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.away.confirm_pane": ("remote mode is on, but slot {slot} still needs its reachability check: started it in herdr pane {pane}. Tell the user:\n"
                                   "  1. look at pane {pane} and subscribe to the topic it shows in the ntfy app\n"
                                   "  2. once subscribed, press Enter in that pane — a test notification with a button arrives\n"
-                                  "  3. tap the button in the notification shade — the result comes back to you as one line [agent-ntfy] slotN is confirmed / timed out / interrupted; no need to poll slots\n"
+                                  "  3. tap the button in the notification shade — the result comes back to you as one line [ntfy-connector] slotN is confirmed / timed out / interrupted; no need to poll slots\n"
                                   "  ⚠️ don't close that pane before pressing Enter and tapping the button (closing cancels the check and nothing is sent back); on success the pane offers to close itself"),
         "cli.away.confirming": ("remote mode is on; slot {slot} is being confirmed right now (a confirmation pane is already open):\n"
                                 "  have the user finish subscribing and press Enter in that pane, then tap the button on the phone"),
@@ -575,7 +575,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.confirm.pane_opened": ("Started the reachability check for {slot} in herdr pane {pane}. Tell the user:\n"
                                     "  1. look at pane {pane} and subscribe to the topic it shows in the ntfy app\n"
                                     "  2. once subscribed, press Enter in that pane — a test notification with a button arrives\n"
-                                    "  3. tap the button in the notification shade — the result comes back to you as one line [agent-ntfy] slotN is confirmed / timed out / interrupted; no need to poll slots\n"
+                                    "  3. tap the button in the notification shade — the result comes back to you as one line [ntfy-connector] slotN is confirmed / timed out / interrupted; no need to poll slots\n"
                                     "  ⚠️ don't close that pane before pressing Enter and tapping the button (closing cancels the check and nothing is sent back); on success the pane offers to close itself"),
         "cli.add_slot.done": "added {slot} (not yet confirmed to reach the phone). Next: run  agent-ntfy confirm-sub {slot}  in your own terminal",
         "cli.status.not_running": "daemon: not running",

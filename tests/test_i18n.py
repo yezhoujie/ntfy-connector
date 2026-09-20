@@ -121,7 +121,7 @@ class EnglishTest(unittest.TestCase):
             self.assertEqual(cjk(r.title + r.message + r.actions[0]["label"]), 0)
         c = inject.render_confirm_request("slot3", reply_url=URL, lang="en")
         self.assertEqual(cjk(c.title + c.message + c.actions[0]["label"]), 0, c.message)
-        self.assertEqual((c.title, c.actions[0]["label"], c.actions[0]["body"]), ("[slot3] Confirm you get notifications", "Got it", "__agent-ntfy:confirmed:slot3__"))
+        self.assertEqual((c.title, c.actions[0]["label"], c.actions[0]["body"]), ("[slot3] Confirm you get notifications", "Got it", "__ntfy-connector:confirmed:slot3__"))
         self.assertLessEqual(len(c.message.encode("utf-8")), render.QUESTION_MAX_BYTES)
 
     def test_validation_errors(self):

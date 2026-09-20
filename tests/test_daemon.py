@@ -1071,7 +1071,7 @@ class ConfirmTest(unittest.TestCase):
         self.assertEqual(sent, {"event": "sent", "slot": "slot4", "id": pub["id"]})
         self.assertEqual(pub["title"], "[slot4] 确认你能收到通知")
         self.assertEqual([a["label"] for a in pub["actions"]], [Z("confirm.button")])
-        self.assertEqual(pub["actions"][0]["body"], "__agent-ntfy:confirmed:slot4__")
+        self.assertEqual(pub["actions"][0]["body"], "__ntfy-connector:confirmed:slot4__")
         self.assertEqual(h.request(cmd="slots")[0]["slots"]["slot4"]["state_key"], "confirming")
         self.assertEqual(h.request(cmd="status")[0]["confirming"], 1)
         # 手机点按钮
@@ -1425,7 +1425,7 @@ class InjectTest(unittest.TestCase):
         h.state.acquire("proj:/w/me", pane="wD:p1")
         h.client.message(h.topic("slot1"), "把 B 方案也列进去")
         wait_until(lambda: any(c[1:3] == ["agent", "prompt"] for c in h.herdr.calls), what="herdr agent prompt 被调用")
-        self.assertEqual(h.herdr.calls[-1], ["herdr", "agent", "prompt", "wD:p1", "[agent-ntfy remote] 把 B 方案也列进去"])
+        self.assertEqual(h.herdr.calls[-1], ["herdr", "agent", "prompt", "wD:p1", "[ntfy-connector remote] 把 B 方案也列进去"])
 
     def test_lease_without_pane_gets_receipt_without_touching_herdr(self):
         h = Harness(self)
@@ -1446,7 +1446,7 @@ class InjectTest(unittest.TestCase):
         n = len(h.client.published)
         h.client.message(h.topic(slot), "把 B 方案也列进去")
         wait_until(lambda: any(c[1:3] == ["agent", "prompt"] for c in h.herdr.calls), what="herdr agent prompt 被调用")
-        self.assertEqual(h.herdr.calls[-1], ["herdr", "agent", "prompt", "wD:p1", "[agent-ntfy remote] 把 B 方案也列进去"])
+        self.assertEqual(h.herdr.calls[-1], ["herdr", "agent", "prompt", "wD:p1", "[ntfy-connector remote] 把 B 方案也列进去"])
         time.sleep(0.1)
         self.assertEqual(len(h.client.published), n)  # 送达了：没有回执
 
@@ -1458,7 +1458,7 @@ class InjectTest(unittest.TestCase):
         self.assertEqual(pub["topic"], h.topic("slot4"))
         self.assertEqual(pub["title"], "[slot4] 消息未送达")
         self.assertEqual([a["label"] for a in pub["actions"]], [Z("receipt.button.ignore")])
-        self.assertEqual(pub["actions"][0]["body"], "__agent-ntfy:ignore:slot4__")
+        self.assertEqual(pub["actions"][0]["body"], "__ntfy-connector:ignore:slot4__")
         self.assertNotIn("没人租", pub["message"])
         self.assertEqual(h.herdr.calls, [])  # 没租约：herdr 一次都没调
         self.assertIn(pub["id"], h.daemon._own_ids)
@@ -1618,7 +1618,7 @@ class InjectTest(unittest.TestCase):
         for i in range(3):
             h.client.message(h.topic(slot), f"第{i}条")
         wait_until(lambda: sum(c[1:3] == ["agent", "prompt"] for c in h.herdr.calls) == 3, what="三条都注入")
-        self.assertEqual([c[-1] for c in h.herdr.calls if c[1:3] == ["agent", "prompt"]], ["[agent-ntfy remote] 第0条", "[agent-ntfy remote] 第1条", "[agent-ntfy remote] 第2条"])
+        self.assertEqual([c[-1] for c in h.herdr.calls if c[1:3] == ["agent", "prompt"]], ["[ntfy-connector remote] 第0条", "[ntfy-connector remote] 第1条", "[ntfy-connector remote] 第2条"])
 
     def test_second_receipt_on_same_slot_closes_the_first(self):
         h = Harness(self)

@@ -41,7 +41,7 @@ agent ──ask (JSON on stdin)──▶ agent-ntfy ──local socket──▶ 
 ```
 
 - The agent hands over a JSON with eight required fields; the CLI renders it into a fixed Markdown card with **one** button ("Accept recommended") and pushes it. The agent blocks until you tap or type; your reply is returned verbatim. With `notify` it can also push a one-way card (title + body, no button) and carry on.
-- A resident **daemon** is the only ntfy subscriber. Anything you send while no question is pending is injected into the agent's session as an instruction prefixed with `[agent-ntfy remote] ` (this is the one part that needs herdr; §2 lists what works without it).
+- A resident **daemon** is the only ntfy subscriber. Anything you send while no question is pending is injected into the agent's session as an instruction prefixed with `[ntfy-connector remote] ` (this is the one part that needs herdr; §2 lists what works without it).
 - Each **project** (the git toplevel of the directory the agent works in, otherwise that directory) leases one **slot** = one random ntfy topic out of a pool kept in the keychain, a DPAPI file or a 0600 file (§7). Replies are routed by topic. The lease also remembers the herdr pane from which the project last ran `ask`, `notify`, `slots`, `release` (no argument), `away on` or `away status`; that is where phone messages are injected.
 - The channel carries text; it never interprets it, never answers for you, never dedupes.
 - The local socket is a Unix socket on macOS / Linux and a loopback TCP port on Windows (§9, `NTFY_CONNECTOR_IPC`).
@@ -149,7 +149,7 @@ You can close this terminal window now. Back in your agent's session, send it th
   agent-ntfy: slot1 is confirmed; you can use it for questions now
 ```
 
-Only the tap counts, and it must be the notification that popped up — tapping inside the app proves nothing about notifications (see §6). If nothing pops up within 10 minutes the command exits 2; fix the phone and run it again. After `✅ … confirmed` the command prints `You can close this terminal window now. Back in your agent's session, send it this line: agent-ntfy: slot1 is confirmed; you can use it for questions now` — paste that line to the agent; it has no other way to learn the result when you ran the check yourself. When the agent itself runs `confirm-sub` inside herdr, it opens a new pane for you with exactly this dialogue and tells you which pane to look at; the topic name never enters the agent's output. Do not close that pane until you have pressed Enter and tapped the button — closing it cancels the check. When the check ends the pane sends the result back to the agent by itself (a line starting with `[agent-ntfy] ` appears in the agent's session), so you have nothing to relay; after `✅ … confirmed` it asks `Close this pane? [Y/n]`: Enter closes it, `n` keeps it.
+Only the tap counts, and it must be the notification that popped up — tapping inside the app proves nothing about notifications (see §6). If nothing pops up within 10 minutes the command exits 2; fix the phone and run it again. After `✅ … confirmed` the command prints `You can close this terminal window now. Back in your agent's session, send it this line: agent-ntfy: slot1 is confirmed; you can use it for questions now` — paste that line to the agent; it has no other way to learn the result when you ran the check yourself. When the agent itself runs `confirm-sub` inside herdr, it opens a new pane for you with exactly this dialogue and tells you which pane to look at; the topic name never enters the agent's output. Do not close that pane until you have pressed Enter and tapped the button — closing it cancels the check. When the check ends the pane sends the result back to the agent by itself (a line starting with `[ntfy-connector] ` appears in the agent's session), so you have nothing to relay; after `✅ … confirmed` it asks `Close this pane? [Y/n]`: Enter closes it, `n` keeps it.
 
 **Step 3 — ask yourself a question**, to see the round trip:
 
@@ -427,7 +427,7 @@ skill exists, which is not what you want while you are away. The trigger policy 
    keyboard and relay its output — the two taps on the phone (subscribe, press the button) cannot be done
    for them.
 3. **While away**: every question, confirmation or authorization becomes an `ask` (run in the background,
-   one at a time, act on the exit code); phone messages arrive with the `[agent-ntfy remote] ` prefix;
+   one at a time, act on the exit code); phone messages arrive with the `[ntfy-connector remote] ` prefix;
    `notify` is reserved for answering a question asked from the phone and for major events that need no
    decision — task finished, an error, the task cannot continue — never for progress chatter (quota, §8).
 4. **The human is back**: `release`, then `away off`; the daemon keeps running.

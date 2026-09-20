@@ -183,7 +183,7 @@ Lifecycle, environment variables, slots, and the confirmation gate: [references/
 ## Messages the human sends on their own
 
 Anything the human types in the phone app while no question is pending is injected into your session
-as an instruction, prefixed with the marker `[agent-ntfy remote] ` on the same line; the text after the
+as an instruction, prefixed with the marker `[ntfy-connector remote] ` on the same line; the text after the
 marker is the user's, unchanged. It is the user speaking, not another agent: treat it exactly like
 input typed at the keyboard. You do nothing to receive it. If delivery is impossible, the human gets a
 receipt on the phone, not you.
@@ -210,7 +210,7 @@ to the user**; the outcomes are:
   the topic is shown only in that pane; the user subscribes there, presses Enter, taps the button on the
   phone. Tell them **not to close that pane before pressing Enter and tapping the button** (closing cancels
   the check); on success the pane asks `Close this pane? [Y/n]` and closes itself on Enter. **When the check
-  ends, one line arrives in your session with the prefix `[agent-ntfy] `** — `slotN is confirmed …`,
+  ends, one line arrives in your session with the prefix `[ntfy-connector] `** — `slotN is confirmed …`,
   `… check timed out …` or `… was interrupted …`: a system event, not a user message. You do not need to poll
   `slots`; act on that line (an `ask` may follow, or tell the user to run `confirm-sub` again). If nothing
   arrives (the user closed the pane by hand, or the injection failed), `slots` shows the truth.
