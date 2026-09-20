@@ -101,7 +101,7 @@ class CheckTest(unittest.TestCase):
         payload["recommend"] = "keep"
         text = validate.format_problems(validate.check(payload, "zh"), "zh")
         self.assertIn("消息未发送", text)
-        self.assertTrue(text.startswith("agent-ntfy ask: 输入校验未通过（3 处），全部修正后重试，消息未发送。\n"))
+        self.assertTrue(text.startswith("ntfy-connector ask: 输入校验未通过（3 处），全部修正后重试，消息未发送。\n"))
         self.assertIn("\n  options    : 只有 1 项，要求 2~5 项（只有一个选项不叫选择）\n", text)
         self.assertIn('\n  recommend  : "keep" 不在 options 的 id 里（现有 id: temp）\n', text)
         self.assertIn("\n  reasoning  : 缺失。必填，要写倾向的理由 + 最强的反对意见\n", text)
@@ -238,14 +238,14 @@ class NotifyCheckTest(unittest.TestCase):
     def test_format_uses_notify_header(self):
         problems = validate.check_notify({"title": "x"}, "zh")
         text = validate.format_problems(problems, "zh", command="notify")
-        self.assertTrue(text.startswith("agent-ntfy notify: 输入校验未通过（1 处），全部修正后重试，消息未发送。\n\n"), text)
+        self.assertTrue(text.startswith("ntfy-connector notify: 输入校验未通过（1 处），全部修正后重试，消息未发送。\n\n"), text)
         self.assertIn("\n  body       : 缺失。必填，", text)
         en = validate.format_problems(validate.check_notify({"title": "x"}, "en"), "en", command="notify")
-        self.assertTrue(en.startswith("agent-ntfy notify: input validation failed (1 issue(s))"), en)
+        self.assertTrue(en.startswith("ntfy-connector notify: input validation failed (1 issue(s))"), en)
         self.assertIn("Message NOT sent", en)
         # 缺省仍是 ask 的抬头，且提问卡的「正文」那条照旧译
         ask = validate.format_problems(validate.check({**SAMPLE, "description": "字" * 1300}, "zh"), "zh")
-        self.assertTrue(ask.startswith("agent-ntfy ask: "))
+        self.assertTrue(ask.startswith("ntfy-connector ask: "))
         self.assertIn("\n  正文       : ", ask)
 
 

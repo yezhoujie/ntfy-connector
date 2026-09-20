@@ -353,7 +353,7 @@ class AskFlowTest(unittest.TestCase):
                                             {"slot": "slot2", "leased_by": "another", "subscribed": False, "active": False}])
         self.assertNotIn("candidates", first)
         self.assertNotIn("release", first["message"])
-        self.assertIn("agent-ntfy add-slot", first["message"])
+        self.assertIn("ntfy-connector add-slot", first["message"])
         self.assertEqual(first["message"], Z("daemon.no_free_slot", n=2))
         sock.close()
 
@@ -1321,7 +1321,7 @@ class ConfirmTest(unittest.TestCase):
         h.client.drop()  # 触发一：断线 + 两次重连失败 ⇒ 告警；第三次连上 ⇒ 「已恢复」——两条 warning 正等着的 ask 都收到了
         self.assertIn("断开", next(ask_events)["message"])
         self.assertIn("恢复", next(ask_events)["message"])
-        with self.assertLogs("agent-ntfy.daemon", "INFO") as logs:
+        with self.assertLogs("ntfy-connector.daemon", "INFO") as logs:
             h.client.message(h.topic("slot4"), "我收到了")  # 触发二：手机来的文字（不是按钮）
             wait_until(lambda: any("确认中收到文字" in r.getMessage() for r in logs.records), what="daemon 处理了那条文字")
         self.assertEqual(select.select([sock], [], [], 0.5), ([], [], []))  # 0.5 s 内一行都没有
@@ -1402,7 +1402,7 @@ class ConfirmTest(unittest.TestCase):
         h = Harness(self, subscribed=())
         sock, first, events = h.ask()
         self.assertEqual(first["kind"], "unconfirmed")
-        self.assertIn("请用户在自己的终端跑 agent-ntfy confirm-sub slot1", first["message"])
+        self.assertIn("请用户在自己的终端跑 ntfy-connector confirm-sub slot1", first["message"])
         sock.close()
         h2 = Harness(self, pool_size=1, subscribed=("slot1",))
         h2.state.acquire("someone-else")

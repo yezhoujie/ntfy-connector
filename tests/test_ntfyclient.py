@@ -2,7 +2,7 @@
 
 网络不可达时用例直接报错，不 skip——「OK (skipped=N)」与全绿在观感上一样，会把坏的当好的。
 唯一的跳过开关是 NTFY_CONNECTOR_OFFLINE=1（CI / 省配额用）：整类 RealNtfyTest 显式 skip，本地替身照跑。
-每次运行随机生成测试 topic（前缀 agent-ntfy-test-，与正式池的 agent-ntfy- 区分开），不订阅、不清理，
+每次运行随机生成测试 topic（前缀 ntfy-connector-test-，与正式池的 ntfy-connector- 区分开），不订阅、不清理，
 服务端 12 小时自动过期。
 ntfy.sh 对同一来源 IP 每天限 250 条消息（docs.ntfy.sh/publish → Limitations），每条真网用例要发 1~3 条，
 别把整套放进循环里反复跑；收到 HTTP 429 先当限流，别怀疑代码。
@@ -30,8 +30,8 @@ CHINESE_TITLE = "✅ 已回复 · 助手没检出代码时，临时目录留还�
 
 
 def topic_for(name):
-    """每个用例一个 topic，互不串扰；形如 agent-ntfy-test-<8 位十六进制>-<用例名>。"""
-    return f"agent-ntfy-test-{RUN_ID}-{name}"
+    """每个用例一个 topic，互不串扰；形如 ntfy-connector-test-<8 位十六进制>-<用例名>。"""
+    return f"ntfy-connector-test-{RUN_ID}-{name}"
 
 
 class NoNetworkClient(NtfyClient):

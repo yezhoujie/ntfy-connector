@@ -129,7 +129,7 @@ class RestrictPrivateDirWindowsTests(unittest.TestCase):
 
         with mock.patch.object(platform_, "_platform", return_value="win32"), \
                 mock.patch.object(platform_, "_python_version", return_value=(3, 12)), \
-                self.assertLogs("agent-ntfy.platform", "WARNING"):
+                self.assertLogs("ntfy-connector.platform", "WARNING"):
             platform_.restrict_private_dir(target, run=fake_run)
 
     def test_py312_run_raises_oserror_warns_and_does_not_raise(self):
@@ -140,7 +140,7 @@ class RestrictPrivateDirWindowsTests(unittest.TestCase):
 
         with mock.patch.object(platform_, "_platform", return_value="win32"), \
                 mock.patch.object(platform_, "_python_version", return_value=(3, 12)), \
-                self.assertLogs("agent-ntfy.platform", "WARNING"):
+                self.assertLogs("ntfy-connector.platform", "WARNING"):
             platform_.restrict_private_dir(target, run=fake_run)
 
     def test_py313_skips_icacls(self):

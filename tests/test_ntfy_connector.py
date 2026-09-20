@@ -175,11 +175,11 @@ class AskExitCodesTest(unittest.TestCase):
 
     # 1：校验不过，消息未发送，stdout 空，不需要 daemon 在跑
     def test_invalid_input_exit_1_without_daemon(self):
-        code, out, err = run(["--home", "/nonexistent/agent-ntfy-home", "ask"], '{"title": "x",')
+        code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "ask"], '{"title": "x",')
         self.assertEqual((code, out), (1, ""))
         self.assertIn("消息未发送", err)
         bad = {**SAMPLE, "options": SAMPLE["options"][:1], "recommend": "nope"}
-        code, out, err = run(["--home", "/nonexistent/agent-ntfy-home", "ask"], json.dumps(bad))
+        code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "ask"], json.dumps(bad))
         self.assertEqual((code, out), (1, ""))
         self.assertIn("输入校验未通过（2 处）", err)
         self.assertIn("消息未发送", err)
@@ -194,10 +194,10 @@ class AskExitCodesTest(unittest.TestCase):
 
     # 3：daemon 没在跑，stderr 给出启动方式，消息未发送
     def test_no_daemon_exit_3_with_start_hint(self):
-        code, out, err = run(["--home", "/nonexistent/agent-ntfy-home", "ask"], json.dumps(SAMPLE))
+        code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "ask"], json.dumps(SAMPLE))
         self.assertEqual((code, out), (3, ""))
         self.assertIn("消息未发送", err)
-        self.assertIn("agent-ntfy daemon --detach", err)
+        self.assertIn("ntfy-connector daemon --detach", err)
         self.assertIn("herdr", err)
 
     # 3：daemon 中途停了，stderr 写明「已发送但」
@@ -278,7 +278,7 @@ class AskExitCodesTest(unittest.TestCase):
         for bad in ("0", "-5"):
             with self.subTest(timeout=bad):
                 with self.assertRaises(SystemExit) as cm:
-                    run(["--home", "/nonexistent/agent-ntfy-home", "ask", "--timeout", bad], json.dumps(SAMPLE))
+                    run(["--home", "/nonexistent/ntfy-connector-home", "ask", "--timeout", bad], json.dumps(SAMPLE))
                 self.assertEqual(cm.exception.code, 2)
 
     # 订阅断开的提醒走 stderr，不影响 stdout
@@ -328,23 +328,23 @@ class NotifyExitCodesTest(unittest.TestCase):
 
     # 1：校验不过，消息未发送，stdout 空，不需要 daemon 在跑；抬头点名 notify
     def test_invalid_input_exit_1_without_daemon(self):
-        code, out, err = run(["--home", "/nonexistent/agent-ntfy-home", "notify"], '{"title": "x"}')
+        code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "notify"], '{"title": "x"}')
         self.assertEqual((code, out), (1, ""))
-        self.assertIn("agent-ntfy notify", err)
+        self.assertIn("ntfy-connector notify", err)
         self.assertIn("消息未发送", err)
         self.assertIn("body", err)
-        code, out, err = run(["--home", "/nonexistent/agent-ntfy-home", "notify"], json.dumps({**NOTIFY, "body": "字" * 2000}))
+        code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "notify"], json.dumps({**NOTIFY, "body": "字" * 2000}))
         self.assertEqual(code, 1)
         self.assertIn("body", err)
-        code, out, err = run(["--home", "/nonexistent/agent-ntfy-home", "notify"], '{"title":')
+        code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "notify"], '{"title":')
         self.assertEqual((code, out), (1, ""))
 
     # 3：daemon 没在跑 / 发布失败，stderr 写明「消息未发送」
     def test_channel_failure_exit_3_says_not_sent(self):
-        code, out, err = run(["--home", "/nonexistent/agent-ntfy-home", "notify"], json.dumps(NOTIFY))
+        code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "notify"], json.dumps(NOTIFY))
         self.assertEqual((code, out), (3, ""))
         self.assertIn("消息未发送", err)
-        self.assertIn("agent-ntfy daemon --detach", err)
+        self.assertIn("ntfy-connector daemon --detach", err)
         h = Harness(self)
         h.client.fail_publish = "HTTP 429"
         code, out, err = run(["--home", str(h.home), "notify"], json.dumps(NOTIFY), HERDR)
@@ -393,7 +393,7 @@ class NotifyExitCodesTest(unittest.TestCase):
         self.assertEqual(cm.exception.code, 0)
         self.assertNotIn("--timeout", out.getvalue())
         with self.assertRaises(SystemExit) as cm:
-            run(["--home", "/nonexistent/agent-ntfy-home", "notify", "--timeout", "5"], json.dumps(NOTIFY))
+            run(["--home", "/nonexistent/ntfy-connector-home", "notify", "--timeout", "5"], json.dumps(NOTIFY))
         self.assertEqual(cm.exception.code, 2)
 
 
@@ -478,7 +478,7 @@ class ConfirmSubTest(unittest.TestCase):
         code, out, err = run(["--home", str(h.home), "confirm-sub", "slot4", "--timeout", "1"])  # run() 的 stdout 是 StringIO，不是 TTY
         self.assertEqual((code, out), (4, ""))
         self.assertIn("在你自己的终端跑", err)
-        self.assertIn("agent-ntfy confirm-sub slot4", err)
+        self.assertIn("ntfy-connector confirm-sub slot4", err)
         self.assertIn("--subscribed", err)
         for t in h.store.load() or []:
             self.assertNotIn(t, err)
@@ -776,7 +776,7 @@ class ConfirmSubTest(unittest.TestCase):
         self.assertEqual(code, 3)
 
     def test_no_daemon_exits_3_with_start_hint(self):
-        code, out, err = run(["--home", "/nonexistent/agent-ntfy-home", "confirm-sub", "slot1", "--subscribed"])
+        code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "confirm-sub", "slot1", "--subscribed"])
         self.assertEqual((code, out), (3, ""))
         self.assertIn("daemon 没在跑", err)
 
@@ -834,10 +834,10 @@ class ConfirmSubTest(unittest.TestCase):
         spawn.assert_not_called()
 
     def test_commands_without_daemon(self):
-        code, out, err = run(["--home", "/nonexistent/agent-ntfy-home", "slots"])
+        code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "slots"])
         self.assertEqual(code, 3)
-        self.assertIn("agent-ntfy daemon", err)
-        code, out, err = run(["--home", "/nonexistent/agent-ntfy-home", "daemon", "--status"])
+        self.assertIn("ntfy-connector daemon", err)
+        code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "daemon", "--status"])
         self.assertEqual((code, out), (1, "daemon：未运行\n"))
 
     # 刚起来还没连上 ntfy 时，--status 不能打出「断开 None 秒」
@@ -866,7 +866,7 @@ class ConfirmSubTest(unittest.TestCase):
         (home / "daemon.pid").write_text("4242\n")
         code, out, err = run(["--home", str(home), "daemon", "--status"])
         self.assertEqual((code, out), (1, Z("cli.status.no_socket", pid=4242) + "\n"))
-        code, out, err = run(["--home", "/nonexistent/agent-ntfy-home", "daemon", "--status"])
+        code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "daemon", "--status"])
         self.assertEqual((code, out), (1, Z("cli.status.not_running") + "\n"))
 
     # --stop 的等待有总预算（30 s）：daemon 答应了 stopping 却一直不退，到点报超时 rc 1，不会因为每轮探活各等一会儿而拖成几分钟
@@ -923,7 +923,7 @@ class ConfirmSubTest(unittest.TestCase):
     def test_invalid_env_ipc_fails_loudly_everywhere(self):
         for argv, stdin in ((["slots"], ""), (["ask"], json.dumps(SAMPLE)), (["daemon", "--status"], ""), (["daemon", "--stop"], ""),
                             (["daemon", "--detach"], ""), (["daemon"], ""), (["release"], "")):
-            code, out, err = run(["--home", "/nonexistent/agent-ntfy-home", *argv], stdin, env={"NTFY_CONNECTOR_IPC": "bogus"})
+            code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", *argv], stdin, env={"NTFY_CONNECTOR_IPC": "bogus"})
             self.assertEqual((code, out), (1, ""), (argv, err))
             self.assertIn("bogus", err)
             self.assertIn("unix / tcp", err)
@@ -965,7 +965,7 @@ class HerdrHelpersTest(unittest.TestCase):
     def test_probe_is_silent_when_no_daemon(self):
         errbuf = io.StringIO()
         with contextlib.redirect_stderr(errbuf):
-            self.assertIsNone(ntfy_connector.probe(Path("/nonexistent/agent-ntfy-home")))
+            self.assertIsNone(ntfy_connector.probe(Path("/nonexistent/ntfy-connector-home")))
         self.assertEqual(errbuf.getvalue(), "")
 
     # daemon 已 bind 但还没进主循环（比如卡在初始化）：探活要在有限时间内放弃，不能让 away on 挂死
@@ -1115,7 +1115,7 @@ class ConfirmSubPaneTest(unittest.TestCase):
     def test_non_tty_without_daemon_exits_3(self):
         fake = FakeHerdr()
         with mock.patch("ntfy_connector.herdr_run", fake):
-            code, out, err = run(["--home", "/nonexistent/agent-ntfy-home", "confirm-sub", "slot1"], env=HERDR)
+            code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "confirm-sub", "slot1"], env=HERDR)
         self.assertEqual((code, out), (3, ""))
         self.assertIn("daemon 没在跑", err)
         self.assertNotIn(["pane", "split"], [c[1:3] for c in fake.calls])
@@ -1137,7 +1137,7 @@ class ConfirmSubPaneTest(unittest.TestCase):
         with mock.patch("ntfy_connector.herdr_run", fake):
             code, out, err = run(["--home", str(h.home), "confirm-sub", "slot4"], env=HERDR)
         self.assertEqual((code, out), (4, ""))
-        self.assertIn("agent-ntfy confirm-sub slot4", err)
+        self.assertIn("ntfy-connector confirm-sub slot4", err)
         self.assertEqual([c[1:3] for c in fake.calls], [["pane", "list"]])
 
     def test_non_tty_split_failure_exits_4(self):
@@ -1147,7 +1147,7 @@ class ConfirmSubPaneTest(unittest.TestCase):
         with mock.patch("ntfy_connector.herdr_run", fake):
             code, out, err = run(["--home", str(h.home), "confirm-sub", "slot4"], env=HERDR)
         self.assertEqual((code, out), (4, ""))
-        self.assertIn("agent-ntfy confirm-sub slot4", err)
+        self.assertIn("ntfy-connector confirm-sub slot4", err)
 
     def test_non_tty_run_failure_after_split_exits_4(self):
         h = Harness(self, subscribed=())
@@ -1156,7 +1156,7 @@ class ConfirmSubPaneTest(unittest.TestCase):
         with mock.patch("ntfy_connector.herdr_run", fake):
             code, out, err = run(["--home", str(h.home), "confirm-sub", "slot4"], env=HERDR)
         self.assertEqual((code, out), (4, ""))
-        self.assertIn("agent-ntfy confirm-sub slot4", err)
+        self.assertIn("ntfy-connector confirm-sub slot4", err)
         self.assertEqual([c[1:3] for c in fake.calls], [["pane", "list"], ["pane", "split"], ["pane", "run"]])
 
     def test_show_topic_and_subscribed_paths_do_not_open_panes(self):
@@ -1231,7 +1231,7 @@ class AwayOnTest(unittest.TestCase):
         h.state.acquire(owner(self.root))
         code, out, err = self.away_on(h.home, env={})
         self.assertEqual((code, out), (4, ""))
-        self.assertIn("agent-ntfy confirm-sub slot1", err)
+        self.assertIn("ntfy-connector confirm-sub slot1", err)
         self.assertFalse((self.root / projstate.DIR_NAME).exists())
         self.assertEqual(self.fake.calls, [])
 
@@ -1266,7 +1266,7 @@ class AwayOnTest(unittest.TestCase):
         h.state.acquire("proj:/w/b")
         code, out, err = self.away_on(h.home)
         self.assertEqual((code, out), (4, ""))
-        self.assertEqual(err.splitlines()[0], "agent-ntfy: " + Z("daemon.no_free_slot", n=2))  # 抬头与 ask 撞满时同款
+        self.assertEqual(err.splitlines()[0], "ntfy-connector: " + Z("daemon.no_free_slot", n=2))  # 抬头与 ask 撞满时同款
         self.assertIn(Z("cli.ask.holder", slot="slot1", holder="proj:/w/a", state=Z("cli.ask.holder.idle")), err)
         self.assertIn(Z("cli.ask.holder", slot="slot2", holder="proj:/w/b", state=Z("cli.ask.holder.idle") + Z("cli.ask.holder.unconfirmed")), err)
         self.assertEqual([r["leased_by"] for r in h.state.slots().values()], ["proj:/w/a", "proj:/w/b"])
@@ -1382,7 +1382,7 @@ class AwayOnTest(unittest.TestCase):
     def test_unwritable_state_dir_exits_3_before_anything_starts(self):
         (self.root / projstate.DIR_NAME).write_text("not a dir", encoding="utf-8")
         with mock.patch("ntfy_connector._spawn_daemon") as spawn:
-            code, out, err = self.away_on(Path("/nonexistent/agent-ntfy-home"))
+            code, out, err = self.away_on(Path("/nonexistent/ntfy-connector-home"))
         self.assertEqual((code, out), (3, ""))
         self.assertIn(Z("cli.away.io_failed", error="").rstrip(), err)
         self.assertEqual(self.fake.calls, [])
@@ -1392,7 +1392,7 @@ class AwayOnTest(unittest.TestCase):
     # daemon 没跑：只关开关；租约还在 daemon 的文件里，本项目文件里的 slot 也留着（它仍是事实，下次 daemon 起来 slots 能看到）
     def test_off_still_works_without_daemon(self):
         projstate.save(self.root, away=True, slot="slot1", confirmed=True, target=owner(self.root))
-        code, out, err = run(["--home", "/nonexistent/agent-ntfy-home", "away", "off"], root=self.root)
+        code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "away", "off"], root=self.root)
         self.assertEqual((code, err), (0, ""))
         self.assertEqual((self.state()["away"], self.state()["slot"], self.state()["confirmed"]), (False, "slot1", True))
 

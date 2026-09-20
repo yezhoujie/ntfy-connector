@@ -74,7 +74,7 @@ class StateError(Exception):
 
 
 class NeedsUserDecision(StateError):
-    """全部槽位已租用，要用户决定：去某个项目关闭远程模式（释放那个槽位），还是新建槽位（agent-ntfy add-slot）。
+    """全部槽位已租用，要用户决定：去某个项目关闭远程模式（释放那个槽位），还是新建槽位（ntfy-connector add-slot）。
 
     租约是排他的：「已租用·空闲」只表示那个项目此刻没有提问挂着，不表示它不用了——别的项目不能顶替它，
     一个会话也不替另一个会话释放租约。占用情况由调用方（daemon）列给用户看。

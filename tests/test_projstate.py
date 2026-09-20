@@ -189,20 +189,20 @@ class AwayCommandTest(unittest.TestCase):
             st = json.loads((root / projstate.DIR_NAME / "state.json").read_text(encoding="utf-8"))
             self.assertEqual((st["away"], st["target"], st["slot"]), (True, f"proj:{root}", "slot1"))  # 开启即租下
 
-            code, out, err = ta.run(["--home", "/nonexistent/agent-ntfy-home", "away", "status"], env=ta.HERDR, root=ta.CWD)
+            code, out, err = ta.run(["--home", "/nonexistent/ntfy-connector-home", "away", "status"], env=ta.HERDR, root=ta.CWD)
             self.assertEqual(code, 0)
             self.assertIn(ta.Z("cli.away.state.on"), out)
             self.assertIn("slot1", out)
 
-            code, out, err = ta.run(["--home", "/nonexistent/agent-ntfy-home", "away", "off"], env=ta.HERDR, root=ta.CWD)
+            code, out, err = ta.run(["--home", "/nonexistent/ntfy-connector-home", "away", "off"], env=ta.HERDR, root=ta.CWD)
             self.assertEqual(code, 0)
             self.assertFalse(json.loads((root / projstate.DIR_NAME / "state.json").read_text(encoding="utf-8"))["away"])
 
-            code, out, err = ta.run(["--home", "/nonexistent/agent-ntfy-home", "away", "status", "--json"], root=ta.CWD)
+            code, out, err = ta.run(["--home", "/nonexistent/ntfy-connector-home", "away", "status", "--json"], root=ta.CWD)
             self.assertEqual(code, 0)
             self.assertEqual(json.loads(out)["away"], False)
 
-            code, out, err = ta.run(["--home", "/nonexistent/agent-ntfy-home", "away", "status"], env={"NTFY_CONNECTOR_LANG": "en"}, root=ta.CWD)
+            code, out, err = ta.run(["--home", "/nonexistent/ntfy-connector-home", "away", "status"], env={"NTFY_CONNECTOR_LANG": "en"}, root=ta.CWD)
             self.assertEqual(code, 0)
             self.assertIsNone(CJK.search(out + err), (out, err))
             self.assertIn("off", out)
@@ -212,11 +212,11 @@ class AwayCommandTest(unittest.TestCase):
         root = plain_dir(self)
         with chdir(root):
             for action in ("status", "off"):
-                code, out, err = ta.run(["--home", "/nonexistent/agent-ntfy-home", "away", action], root=ta.CWD)
+                code, out, err = ta.run(["--home", "/nonexistent/ntfy-connector-home", "away", action], root=ta.CWD)
                 self.assertEqual((code, err), (0, ""), action)
                 self.assertIn(ta.Z("cli.away.not_enabled"), out)
                 self.assertFalse((root / projstate.DIR_NAME).exists(), action)
-            code, out, err = ta.run(["--home", "/nonexistent/agent-ntfy-home", "away", "status", "--json"], root=ta.CWD)
+            code, out, err = ta.run(["--home", "/nonexistent/ntfy-connector-home", "away", "status", "--json"], root=ta.CWD)
             self.assertEqual((code, out), (0, "{}\n"))
 
     # 目录在、文件不在（或坏了）：算已启用，按空状态显示，不说「没有目录」
@@ -224,7 +224,7 @@ class AwayCommandTest(unittest.TestCase):
         root = plain_dir(self)
         projstate.ensure(root)
         with chdir(root):
-            code, out, err = ta.run(["--home", "/nonexistent/agent-ntfy-home", "away", "status"], root=ta.CWD)
+            code, out, err = ta.run(["--home", "/nonexistent/ntfy-connector-home", "away", "status"], root=ta.CWD)
             self.assertEqual(code, 0)
             self.assertNotIn(ta.Z("cli.away.not_enabled"), out)
             self.assertIn(ta.Z("cli.away.state.off"), out)
@@ -237,7 +237,7 @@ class AwayCommandTest(unittest.TestCase):
         fake = FakeHerdr()
         with chdir(root), mock.patch("ntfy_connector.herdr_run", fake), mock.patch("ntfy_connector.probe", return_value=None) as probe, \
                 mock.patch("ntfy_connector._spawn_daemon") as spawn:
-            code, out, err = ta.run(["--home", "/nonexistent/agent-ntfy-home", "away", "on"], root=ta.CWD)
+            code, out, err = ta.run(["--home", "/nonexistent/ntfy-connector-home", "away", "on"], root=ta.CWD)
             self.assertEqual((code, out), (3, ""))
             self.assertIn("状态文件读写失败", err)
         self.assertEqual(fake.calls, [])
@@ -250,15 +250,15 @@ class AwayCommandTest(unittest.TestCase):
         projstate.ensure(root)
         projstate.save(root, away=True, slot="slot1", confirmed=True)
         before = projstate.state_path(root).read_text(encoding="utf-8")
-        code, out, err = ta.run(["--home", "/nonexistent/agent-ntfy-home", "away", "status"], root=root)
+        code, out, err = ta.run(["--home", "/nonexistent/ntfy-connector-home", "away", "status"], root=root)
         self.assertEqual(code, 0)
         self.assertIn(ta.Z("cli.away.slot", slot="slot1", gate=ta.Z("cli.slots.gate.confirmed")), out)
         self.assertEqual(out.rstrip("\n").splitlines()[-1], ta.Z("cli.away.unverified"))
         self.assertNotIn(ta.Z("cli.away.corrected"), out)
-        code, out, err = ta.run(["--home", "/nonexistent/agent-ntfy-home", "away", "status", "--json"], root=root)
+        code, out, err = ta.run(["--home", "/nonexistent/ntfy-connector-home", "away", "status", "--json"], root=root)
         self.assertEqual((code, json.loads(out)["slot"]), (0, "slot1"))
         self.assertEqual(projstate.state_path(root).read_text(encoding="utf-8"), before)
-        code, out, err = ta.run(["--home", "/nonexistent/agent-ntfy-home", "away", "status"], env={"NTFY_CONNECTOR_LANG": "en"}, root=root)
+        code, out, err = ta.run(["--home", "/nonexistent/ntfy-connector-home", "away", "status"], env={"NTFY_CONNECTOR_LANG": "en"}, root=root)
         self.assertIsNone(CJK.search(out + err), (out, err))
 
     # daemon 在跑：以它的租约为准校对文件——文件漏记 / 记错 / 租约已不在，三种都改写并提示「已校正」；一致就不提示

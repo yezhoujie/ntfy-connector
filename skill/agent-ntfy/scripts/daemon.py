@@ -67,8 +67,8 @@ MAX_REQUEST_BYTES = 1024 * 1024  # 一行请求的上限：本地 0600 socket �
 SEND_TIMEOUT = 5.0  # 往客户端写事件的阻塞上限
 STOP_INJECT_GRACE = 2.0  # 关停时给在途的 herdr 调用这么久收尾（正常几十毫秒就回）；过了就按「无法确认」发回执
 STOP_RECEIPT_TIMEOUT = 5.0  # 关停路径上每张回执的发布上限：尽力而为，不用平时的 30 秒把 --stop 拖住
-LOG = logging.getLogger("agent-ntfy.daemon")
-LOG_ROOT = logging.getLogger("agent-ntfy")  # handler 挂这一级：注入层（agent-ntfy.inject）的日志才会一起进 daemon.log
+LOG = logging.getLogger("ntfy-connector.daemon")
+LOG_ROOT = logging.getLogger("ntfy-connector")  # handler 挂这一级：注入层（ntfy-connector.inject）的日志才会一起进 daemon.log
 
 
 class DaemonError(Exception):

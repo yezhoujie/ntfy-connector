@@ -60,7 +60,7 @@ MARK_ACTIONS = ("release", "ignore", "confirmed")  # 回执的两个按钮 + 可
 MARK_RE = re.compile(r"__ntfy-connector:(release|ignore|confirmed):(slot[1-9][0-9]*)__")
 
 
-LOG = logging.getLogger("agent-ntfy.inject")
+LOG = logging.getLogger("ntfy-connector.inject")
 
 
 # ---------------------------------------------------------------- herdr 子进程

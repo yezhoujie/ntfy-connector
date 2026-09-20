@@ -75,7 +75,7 @@ class ZhRegressionTest(unittest.TestCase):
 
     def test_validation_wording_byte_identical(self):
         text = validate.format_problems(validate.check({"title": "x", "options": [{"id": "a", "label": "A", "consequence": "c"}], "recommend": "nope"}, "zh"), "zh")
-        self.assertTrue(text.startswith("agent-ntfy ask: 输入校验未通过（7 处），全部修正后重试，消息未发送。\n\n"))
+        self.assertTrue(text.startswith("ntfy-connector ask: 输入校验未通过（7 处），全部修正后重试，消息未发送。\n\n"))
         self.assertIn("  options    : 只有 1 项，要求 2~5 项（只有一个选项不叫选择）\n", text)
         self.assertIn('  recommend  : "nope" 不在 options 的 id 里（现有 id: a）\n', text)
         self.assertIn("  doing      : 缺失。必填，一句话说这是哪件事\n", text)
@@ -151,7 +151,7 @@ class EnglishTest(unittest.TestCase):
         self.assertEqual((code, cjk(err)), (1, 0), err)
         code, out, err = run(["--home", str(h.home), "add-slot"], env=env)
         self.assertEqual((code, cjk(out)), (0, 0), out)
-        code, out, err = run(["--home", "/nonexistent/agent-ntfy-home", "ask"], json.dumps({**SAMPLE, "lang": "en"}), env=env)
+        code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "ask"], json.dumps({**SAMPLE, "lang": "en"}), env=env)
         self.assertEqual((code, cjk(err)), (3, 0), err)
         self.assertIn("Message NOT sent", err)
 
@@ -165,7 +165,7 @@ class EnglishTest(unittest.TestCase):
         code, out, err = run(["--home", str(h.home), "notify"], '{"title": "x"}', env)
         self.assertEqual((code, cjk(err)), (1, 0), err)
         self.assertIn("Message NOT sent", err)
-        code, out, err = run(["--home", "/nonexistent/agent-ntfy-home", "notify"], json.dumps({"title": "t", "body": "b"}), env)
+        code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "notify"], json.dumps({"title": "t", "body": "b"}), env)
         self.assertEqual((code, cjk(err)), (3, 0), err)
         self.assertIn("Message NOT sent", err)
         h2 = Harness(self, subscribed=(), lang="en")
@@ -215,7 +215,7 @@ class LangFieldTest(unittest.TestCase):
         self.assertIn("zh / en", problems[1].message)
         self.assertIn('"jp"', problems[1].message)
         text = validate.format_problems(problems, "zh")
-        self.assertTrue(text.startswith("agent-ntfy ask: 输入校验未通过（2 处）"))
+        self.assertTrue(text.startswith("ntfy-connector ask: 输入校验未通过（2 处）"))
 
     def test_error_language_follows_json_then_env_then_default(self):
         _, problems, lang = validate.check_json(json.dumps({**SAMPLE, "lang": "en", "title": ""}), "zh")
@@ -227,11 +227,11 @@ class LangFieldTest(unittest.TestCase):
         self.assertEqual(lang, "en")
 
     def test_cli_invalid_lang_is_reported_with_the_rest(self):
-        code, out, err = run(["--home", "/nonexistent/agent-ntfy-home", "ask"], json.dumps({**SAMPLE, "lang": "jp", "reasoning": ""}))
+        code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "ask"], json.dumps({**SAMPLE, "lang": "jp", "reasoning": ""}))
         self.assertEqual((code, out), (1, ""))
         self.assertIn("输入校验未通过（2 处）", err)
         self.assertIn("lang       :", err)
-        code, out, err = run(["--home", "/nonexistent/agent-ntfy-home", "ask"], json.dumps({**SAMPLE, "lang": "en", "reasoning": ""}), env={"NTFY_CONNECTOR_LANG": "zh"})
+        code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "ask"], json.dumps({**SAMPLE, "lang": "en", "reasoning": ""}), env={"NTFY_CONNECTOR_LANG": "zh"})
         self.assertEqual(code, 1)
         self.assertEqual(cjk(err), 0, err)  # JSON 里的 en 压过环境的 zh
 
@@ -385,7 +385,7 @@ class RemainingLiteralsTest(unittest.TestCase):
         if ipc.transport(Path("/")) != "unix":
             self.skipTest("路径长度上限只属于 unix socket")  # tcp 没有这个上限，跑下去会在测试进程里真起一个 daemon（读真钥匙串、订真 topic）
         code, out, err = run(["--home", "/tmp/definitely-not-a-dir-xyz/" + "x" * 120, "daemon"], env={"NTFY_CONNECTOR_LANG": "en"})  # socket 路径超长：起不了
-        cli_lines = [l for l in err.splitlines() if l.startswith("agent-ntfy:")]  # 前台 daemon 的日志也打在 stderr，日志按约定保持中文，只看 CLI 那行
+        cli_lines = [l for l in err.splitlines() if l.startswith("ntfy-connector:")]  # 前台 daemon 的日志也打在 stderr，日志按约定保持中文，只看 CLI 那行
         self.assertEqual(code, 3, err)
         self.assertEqual(len(cli_lines), 1, err)
         self.assertEqual(cjk(cli_lines[0]), 0, cli_lines[0])

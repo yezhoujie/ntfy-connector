@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""agent-ntfy：让任意 AI CLI 经 ntfy.sh 把「需要人拍板的事」推到手机，并把人的裁决带回来。
+"""ntfy-connector：让任意 AI CLI 经 ntfy.sh 把「需要人拍板的事」推到手机，并把人的裁决带回来。
 
 子命令:
     ask [--timeout 秒]（默认 43200，即 12 小时）
@@ -64,7 +64,7 @@ import projstate
 import texts
 import validate
 
-PROG = "agent-ntfy"
+PROG = "ntfy-connector"
 HOME = Path(os.environ.get("NTFY_CONNECTOR_HOME", "~/.ntfy-connector")).expanduser()
 DEFAULT_TIMEOUT = 12 * 3600
 EXIT_REPLY, EXIT_INVALID, EXIT_TIMEOUT, EXIT_CHANNEL, EXIT_NEEDS_HUMAN, EXIT_INTERRUPTED = 0, 1, 2, 3, 4, 130

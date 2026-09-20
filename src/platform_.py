@@ -29,7 +29,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-LOG = logging.getLogger("agent-ntfy.platform")
+LOG = logging.getLogger("ntfy-connector.platform")
 
 STOP_SIGNALS_POSIX = ("SIGTERM", "SIGINT", "SIGHUP")
 STOP_SIGNALS_WINDOWS = ("SIGINT", "SIGBREAK")

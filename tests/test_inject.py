@@ -400,7 +400,7 @@ class RunHerdrTest(unittest.TestCase):
     )
 
     def test_missing_binary_is_rc_127(self):
-        r = inject.run_herdr(["definitely-no-such-binary-agent-ntfy", "pane", "list"])
+        r = inject.run_herdr(["definitely-no-such-binary-ntfy-connector", "pane", "list"])
         self.assertEqual(r.rc, 127)
         self.assertFalse(r.ok)
         self.assertFalse(r.timed_out)

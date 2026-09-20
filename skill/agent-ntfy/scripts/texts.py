@@ -27,7 +27,7 @@ TEXTS: dict[str, dict[str, str]] = {
         # ---- 通知卡（render.render_notify）：没有按钮，末尾只有这一句
         "notify.hint": "想回话，直接在这个 topic 里发消息。",
         # ---- 通知卡输入校验（validate.check_notify）：抬头与正文那条不能沿用提问卡的（那两条写死了 ask 与提问卡的字段名）
-        "validate.notify.header": "agent-ntfy notify: 输入校验未通过（{n} 处），全部修正后重试，消息未发送。",
+        "validate.notify.header": "ntfy-connector notify: 输入校验未通过（{n} 处），全部修正后重试，消息未发送。",
         "validate.notify.hint.body": "通知正文，可用 Markdown（加粗 / 列表 / 分隔线）",
         "validate.notify.body_too_long": "渲染后 {size} 字节，上限 {limit} 字节，超出 {over} 字节。精简 body（不会替你截断）",
         "button.accept": "采纳推荐",
@@ -76,7 +76,7 @@ TEXTS: dict[str, dict[str, str]] = {
         # ---- 可达性确认闸的测试消息
         "confirm.title": "确认你能收到通知",
         "confirm.button": "我收到了",
-        "confirm.body": ("这是 agent-ntfy 发来的测试消息，用来确认这台手机能收到槽位 {slot} 的通知。\n"
+        "confirm.body": ("这是 ntfy-connector 发来的测试消息，用来确认这台手机能收到槽位 {slot} 的通知。\n"
                          "\n"
                          "请在通知栏里点下面的「{button}」按钮——点了就算确认完成，之后 agent 才会往这个槽位发提问。\n"
                          "\n"
@@ -91,7 +91,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "daemon.bad_request.ask_args": "ask 要给非空 leased_by 与正数 timeout",
         "daemon.bad_request.notify_args": "notify 要给非空 leased_by",
         "daemon.bad_request.confirm_timeout": "confirm-sub 的 timeout 要是正数",
-        "daemon.unknown_slot": "没有这个槽位：{slot}（agent-ntfy slots 看现有的）",
+        "daemon.unknown_slot": "没有这个槽位：{slot}（ntfy-connector slots 看现有的）",
         "daemon.no_lease": "这个目标没有租着任何槽位",
         "daemon.release.active": "槽位 {slot} 正有提问等回复，不能释放",
         "daemon.release.confirming": "槽位 {slot} 正在做可达性确认，不能释放",
@@ -100,11 +100,11 @@ TEXTS: dict[str, dict[str, str]] = {
         "daemon.bad_request.not_object": "请求不是一行 JSON 对象：顶层不是对象",
         "daemon.busy.pending": "这个目标已有一个提问在 {slot} 上等回复，先等它结束",
         "daemon.busy.confirming": "槽位 {slot} 正在做可达性确认，等它完成后重试",
-        "daemon.no_free_slot": "{n} 个槽位都在被租用，占用情况见下。把它告诉用户，由用户决定：去某个项目关闭远程模式（释放那个槽位），或新建一个槽位（agent-ntfy add-slot，然后 away on）。别的项目的租约不能替它释放",
-        "daemon.no_confirmed_slot": "远程交互模式下只能用已过闸的槽位，而已过闸的都在被租用，占用情况见下。等用户回到终端决定：去某个项目关闭远程模式，或新建槽位并过闸（agent-ntfy add-slot 后 confirm-sub）",
-        "daemon.release.not_yours": "槽位 {slot} 是 {holder} 租的，不是本项目的，不能替它释放；要释放它，请用户去那个项目关闭远程模式（在那个项目里跑 agent-ntfy away off）",
+        "daemon.no_free_slot": "{n} 个槽位都在被租用，占用情况见下。把它告诉用户，由用户决定：去某个项目关闭远程模式（释放那个槽位），或新建一个槽位（ntfy-connector add-slot，然后 away on）。别的项目的租约不能替它释放",
+        "daemon.no_confirmed_slot": "远程交互模式下只能用已过闸的槽位，而已过闸的都在被租用，占用情况见下。等用户回到终端决定：去某个项目关闭远程模式，或新建槽位并过闸（ntfy-connector add-slot 后 confirm-sub）",
+        "daemon.release.not_yours": "槽位 {slot} 是 {holder} 租的，不是本项目的，不能替它释放；要释放它，请用户去那个项目关闭远程模式（在那个项目里跑 ntfy-connector away off）",
         "daemon.bad_request.lease_args": "lease 需要 leased_by",
-        "daemon.unconfirmed": "槽位 {slot} 还没确认过手机收得到通知。请用户在自己的终端跑 agent-ntfy confirm-sub {slot}，按提示订阅并点按钮，然后重试",
+        "daemon.unconfirmed": "槽位 {slot} 还没确认过手机收得到通知。请用户在自己的终端跑 ntfy-connector confirm-sub {slot}，按提示订阅并点按钮，然后重试",
         "daemon.publish_failed": "向 ntfy 发布失败：{error}",
         "daemon.publish_failed.confirm": "向 ntfy 发布测试消息失败：{error}",
         "daemon.warning.disconnected_at_send": "ntfy 订阅目前断开、仍在重连；提问已发出，回复要等恢复后回放",
@@ -119,8 +119,8 @@ TEXTS: dict[str, dict[str, str]] = {
         "daemon.confirm.mark_failed": "按钮已收到，但订阅状态落盘失败（看 daemon 日志）；修好后再跑一次 confirm-sub",
         # ---- CLI 人读输出
         "cli.start_hint": ("daemon 没在跑。启动方式：\n"
-                           "  herdr 内 ：另开一个 pane 跑  agent-ntfy daemon      （可见、herdr 管生命周期）\n"
-                           "  非 herdr ：agent-ntfy daemon --detach              （脱离会话，靠 --status / --stop 管）\n"
+                           "  herdr 内 ：另开一个 pane 跑  ntfy-connector daemon      （可见、herdr 管生命周期）\n"
+                           "  非 herdr ：ntfy-connector daemon --detach              （脱离会话，靠 --status / --stop 管）\n"
                            "  ⚠️ 别用 agent 自己内部的 shell 或后台任务起它——agent 一退出它就跟着没了"),
         "cli.connect_failed": "连不上 daemon（{path}：{error}）",
         "cli.connect_failed.not_sent": "连不上 daemon（{path}：{error}）。消息未发送。",
@@ -163,7 +163,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.away.slot.none": "槽位：未租用（首次 ask 时自动租）",
         "cli.away.target": "目标身份：{target}",
         "cli.away.updated": "更新于 {updated}",
-        "cli.away.not_enabled": "本项目未启用远程交互模式（项目根没有 .ntfy-connector/）；要开：agent-ntfy away on",
+        "cli.away.not_enabled": "本项目未启用远程交互模式（项目根没有 .ntfy-connector/）；要开：ntfy-connector away on",
         "cli.away.io_failed": "状态文件读写失败：{error}",
         "cli.away.unverified": "daemon 未运行，未校对（以上是状态文件里的记录）",
         "cli.away.corrected": "已按 daemon 的租约校正状态文件",
@@ -179,7 +179,7 @@ TEXTS: dict[str, dict[str, str]] = {
                                 "  让用户去那个窗格完成订阅并按回车，再在手机通知栏点按钮"),
         "cli.away.daemon_failed": "daemon 没有起来（{seconds} 秒内探不到），远程交互模式未开启；看日志 {log}",
         "cli.away.unwritable": "状态目录 {path} 不可写（已存在但不是目录，或没有写权限）",
-        "cli.away.pane_failed": "在 herdr 里开不出窗格（或命令没敲进去），daemon 没有起来，远程交互模式未开启；请在终端跑 agent-ntfy daemon --detach 后重试",
+        "cli.away.pane_failed": "在 herdr 里开不出窗格（或命令没敲进去），daemon 没有起来，远程交互模式未开启；请在终端跑 ntfy-connector daemon --detach 后重试",
         "cli.slots.pane": "  窗格 {pane}",
         "cli.project.unresolved": "定不出当前项目（{error}）；换到一个存在的目录再跑",
         "cli.reminder": "提醒：{message}",
@@ -207,7 +207,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.slots.state.confirming": "确认中",
         "cli.released": "已释放 {slot}",
         "cli.confirm.topic": "{slot} 的 topic：{topic}\n订阅地址：{url}",
-        "cli.confirm.topic_hint": ("topic 名只在你自己的终端里显示：请在你自己的终端跑  agent-ntfy confirm-sub {slot}\n"
+        "cli.confirm.topic_hint": ("topic 名只在你自己的终端里显示：请在你自己的终端跑  ntfy-connector confirm-sub {slot}\n"
                                    "  跑完它会打印一句话，请把那句话发回给 agent（没有 herdr 时不会有人通知 agent 结果）\n"
                                    "  用户已经在手机上订阅过就加 --subscribed（不显示 topic，非终端也能跑）；只想看 topic 名用 --show-topic（会进调用方的输出）"),
         "cli.confirm.guide": "在手机 ntfy app 里订阅上面这个 topic；订阅好后按回车，我会发一条带按钮的测试通知——看到它弹出来、点按钮，确认就完成了。\n⚠️ 按回车、点按钮之前别关这个窗格 / 终端：关了确认就取消，要重来。",
@@ -218,12 +218,12 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.confirm.sent": "测试通知已发出，请在手机通知栏点「{button}」（{seconds} 秒内）…",
         "cli.confirm.done": "✅ {slot} 已确认：手机收得到通知，之后 agent 可以用它提问了",
         "cli.confirm.done_hint": "这个终端窗口可以关了。回到你的 agent 会话，把下面这句发给它：\n  {prompt}",
-        "cli.confirm.done_prompt": "agent-ntfy：{slot} 已过闸，可以用它提问了",
+        "cli.confirm.done_prompt": "ntfy-connector：{slot} 已过闸，可以用它提问了",
         "cli.confirm.report.confirmed": "{slot} 已过闸：手机收得到通知，可以用它提问了",
         "cli.confirm.report.timeout": "{slot} 确认超时：用户没在时限内按回车 / 点按钮；要重来就再跑一次 confirm-sub {slot}",
         "cli.confirm.report.cancelled": "{slot} 的确认被中断（Ctrl-C）；要重来就再跑一次 confirm-sub {slot}",
         "cli.confirm.report.failed": "{slot} 确认失败（退出码 {rc}）；报错在那个窗格里",
-        "cli.confirm.report_failed": "结果没能送回窗格 {pane} 的 agent（{why}）；它可以用 agent-ntfy slots 查",
+        "cli.confirm.report_failed": "结果没能送回窗格 {pane} 的 agent（{why}）；它可以用 ntfy-connector slots 查",
         "cli.confirm.timeout": "{seconds} 秒内没有收到按钮点击，确认未完成。通知没弹出来？按 README 的排查清单检查后再跑一次",
         "cli.confirm.timeout_no_enter": "{seconds} 秒内没等到回车，确认未完成；测试通知还没发出。订阅好之后再跑一次",
         "cli.confirm.disconnected": "daemon 连接中断，确认未完成",
@@ -237,7 +237,7 @@ TEXTS: dict[str, dict[str, str]] = {
                                     "  2. 订阅好后在该窗格按回车，会收到一条带按钮的测试通知\n"
                                     "  3. 在手机通知栏点按钮——结果会以一行 [ntfy-connector] slotN 已过闸 / 超时 / 被中断 注入你的会话，不必轮询 slots\n"
                                     "  ⚠️ 按回车、点按钮之前别关那个窗格（关了确认就取消，且不会有结果送回）；成功后窗格会问要不要关掉"),
-        "cli.add_slot.done": "已新建 {slot}（还没确认过手机收得到通知）。下一步：在你自己的终端跑  agent-ntfy confirm-sub {slot}",
+        "cli.add_slot.done": "已新建 {slot}（还没确认过手机收得到通知）。下一步：在你自己的终端跑  ntfy-connector confirm-sub {slot}",
         "cli.status.not_running": "daemon：未运行",
         "cli.status.no_socket": "daemon：无应答（pid 文件 {pid} 仍在，可能已死）",
         "cli.status.transport": "  传输：{transport}",
@@ -252,9 +252,9 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.detach.already": "已有 daemon 在跑",
         "cli.detach.died": "daemon 没有起来（退出码 {rc}），看 {log}",
         "cli.detach.started": "daemon：已在后台启动，pid {pid}（日志 {log}）",
-        "cli.detach.not_ready": "daemon（pid {pid}）5 秒内还没就绪，仍在启动；稍后用 agent-ntfy daemon --status 看，日志 {log}",
+        "cli.detach.not_ready": "daemon（pid {pid}）5 秒内还没就绪，仍在启动；稍后用 ntfy-connector daemon --status 看，日志 {log}",
         # ---- 校验报错（validate）
-        "validate.header": "agent-ntfy ask: 输入校验未通过（{n} 处），全部修正后重试，消息未发送。",
+        "validate.header": "ntfy-connector ask: 输入校验未通过（{n} 处），全部修正后重试，消息未发送。",
         "validate.field.body": "正文",
         "validate.hint.title": "通知栏那一行钩子，预览只看得到它",
         "validate.hint.doing": "一句话说这是哪件事",
@@ -375,7 +375,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "option.line_recommended": "{i}\\. **{label}** (recommended) → {consequence}",
         "hint": "⚠️ The button is a shortcut.\n\nDisagree? Type your reply in the box below.\n\nA reply takes effect the moment you send it — it can't be withdrawn or amended, so say it all at once.",
         "notify.hint": "To reply, just send a message in this topic.",
-        "validate.notify.header": "agent-ntfy notify: input validation failed ({n} issue(s)); fix them all and retry. Message NOT sent.",
+        "validate.notify.header": "ntfy-connector notify: input validation failed ({n} issue(s)); fix them all and retry. Message NOT sent.",
         "validate.notify.hint.body": "the notification body; Markdown allowed (bold / lists / rules)",
         "validate.notify.body_too_long": "renders to {size} bytes, limit {limit}, {over} bytes over. Trim body (nothing is truncated for you)",
         "button.accept": "Accept recommended",
@@ -420,7 +420,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "control.ignored": "Ignored; the slot is left as is.",
         "confirm.title": "Confirm you get notifications",
         "confirm.button": "Got it",
-        "confirm.body": ("This is a test message from agent-ntfy to confirm this phone receives notifications for slot {slot}.\n"
+        "confirm.body": ("This is a test message from ntfy-connector to confirm this phone receives notifications for slot {slot}.\n"
                          "\n"
                          "Tap the “{button}” button below in the notification shade — that completes the check, and only then will the agent send questions to this slot.\n"
                          "\n"
@@ -434,7 +434,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "daemon.bad_request.ask_args": "ask needs a non-empty leased_by and a positive timeout",
         "daemon.bad_request.notify_args": "notify needs a non-empty leased_by",
         "daemon.bad_request.confirm_timeout": "confirm-sub timeout must be positive",
-        "daemon.unknown_slot": "no such slot: {slot} (run agent-ntfy slots to list them)",
+        "daemon.unknown_slot": "no such slot: {slot} (run ntfy-connector slots to list them)",
         "daemon.no_lease": "this target holds no slot",
         "daemon.release.active": "slot {slot} has a question waiting for a reply; can't release it",
         "daemon.release.confirming": "slot {slot} is in the middle of a reachability check; can't release it",
@@ -443,11 +443,11 @@ TEXTS: dict[str, dict[str, str]] = {
         "daemon.bad_request.not_object": "request is not a single-line JSON object: the top level is not an object",
         "daemon.busy.pending": "this target already has a question waiting on {slot}; wait for it to finish",
         "daemon.busy.confirming": "slot {slot} is in the middle of a reachability check; retry once it finishes",
-        "daemon.no_free_slot": "All {n} slots are leased; occupancy below. Tell the user and let them decide: turn remote mode off in one of those projects (which releases its slot), or add a slot (agent-ntfy add-slot, then away on). Never release another project's lease for it",
-        "daemon.no_confirmed_slot": "In remote mode only confirmed slots can be used, and every confirmed slot is leased; occupancy below. Wait for the user to return and decide: turn remote mode off in one of those projects, or add a slot and confirm it (agent-ntfy add-slot, then confirm-sub)",
-        "daemon.release.not_yours": "slot {slot} is leased by {holder}, not by this project; you cannot release it for them. To free it, the user turns remote mode off in that project (agent-ntfy away off run there)",
+        "daemon.no_free_slot": "All {n} slots are leased; occupancy below. Tell the user and let them decide: turn remote mode off in one of those projects (which releases its slot), or add a slot (ntfy-connector add-slot, then away on). Never release another project's lease for it",
+        "daemon.no_confirmed_slot": "In remote mode only confirmed slots can be used, and every confirmed slot is leased; occupancy below. Wait for the user to return and decide: turn remote mode off in one of those projects, or add a slot and confirm it (ntfy-connector add-slot, then confirm-sub)",
+        "daemon.release.not_yours": "slot {slot} is leased by {holder}, not by this project; you cannot release it for them. To free it, the user turns remote mode off in that project (ntfy-connector away off run there)",
         "daemon.bad_request.lease_args": "lease needs leased_by",
-        "daemon.unconfirmed": "Slot {slot} has not been confirmed to reach the phone yet. Ask the user to run agent-ntfy confirm-sub {slot} in their own terminal, subscribe and tap the button as prompted, then retry",
+        "daemon.unconfirmed": "Slot {slot} has not been confirmed to reach the phone yet. Ask the user to run ntfy-connector confirm-sub {slot} in their own terminal, subscribe and tap the button as prompted, then retry",
         "daemon.publish_failed": "publishing to ntfy failed: {error}",
         "daemon.publish_failed.confirm": "publishing the test message to ntfy failed: {error}",
         "daemon.warning.disconnected_at_send": "the ntfy subscription is currently down and reconnecting; the question went out, the reply will be replayed once it recovers",
@@ -461,8 +461,8 @@ TEXTS: dict[str, dict[str, str]] = {
         "daemon.confirm.busy_confirming": "slot {slot} is already being confirmed; wait for that to finish",
         "daemon.confirm.mark_failed": "button received, but saving the subscription state failed (see the daemon log); fix it and run confirm-sub again",
         "cli.start_hint": ("The daemon is not running. Start it:\n"
-                           "  inside herdr : open another pane and run  agent-ntfy daemon      (visible, herdr owns its lifetime)\n"
-                           "  outside herdr: agent-ntfy daemon --detach                     (detached; manage with --status / --stop)\n"
+                           "  inside herdr : open another pane and run  ntfy-connector daemon      (visible, herdr owns its lifetime)\n"
+                           "  outside herdr: ntfy-connector daemon --detach                     (detached; manage with --status / --stop)\n"
                            "  ⚠️ don't start it from the agent's own shell or as its background task — it dies with the agent"),
         "cli.connect_failed": "can't connect to the daemon ({path}: {error})",
         "cli.connect_failed.not_sent": "can't connect to the daemon ({path}: {error}). Message NOT sent.",
@@ -504,7 +504,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.away.slot.none": "slot: none leased yet (the first ask leases one)",
         "cli.away.target": "target: {target}",
         "cli.away.updated": "updated {updated}",
-        "cli.away.not_enabled": "remote mode is not enabled for this project (no .ntfy-connector/ at the project root); to enable: agent-ntfy away on",
+        "cli.away.not_enabled": "remote mode is not enabled for this project (no .ntfy-connector/ at the project root); to enable: ntfy-connector away on",
         "cli.away.io_failed": "could not read or write the state file: {error}",
         "cli.away.unverified": "daemon not running; not verified (the above is what the state file says)",
         "cli.away.corrected": "state file corrected from the daemon's leases",
@@ -519,7 +519,7 @@ TEXTS: dict[str, dict[str, str]] = {
                                 "  have the user finish subscribing and press Enter in that pane, then tap the button on the phone"),
         "cli.away.daemon_failed": "the daemon did not come up (not reachable within {seconds} s); remote mode NOT enabled. See the log {log}",
         "cli.away.unwritable": "state directory {path} is not writable (exists but is not a directory, or no write permission)",
-        "cli.away.pane_failed": "could not open a herdr pane (or the command did not get typed in); the daemon was not started and remote mode is NOT enabled. Run agent-ntfy daemon --detach in a terminal, then retry",
+        "cli.away.pane_failed": "could not open a herdr pane (or the command did not get typed in); the daemon was not started and remote mode is NOT enabled. Run ntfy-connector daemon --detach in a terminal, then retry",
         "cli.slots.pane": "  pane {pane}",
         "cli.project.unresolved": "cannot tell which project this is ({error}); run from a directory that exists",
         "cli.reminder": "note: {message}",
@@ -547,7 +547,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.slots.state.confirming": "confirming",
         "cli.released": "released {slot}",
         "cli.confirm.topic": "topic for {slot}: {topic}\nsubscribe URL: {url}",
-        "cli.confirm.topic_hint": ("The topic name is only shown in your own terminal: run  agent-ntfy confirm-sub {slot}  there yourself.\n"
+        "cli.confirm.topic_hint": ("The topic name is only shown in your own terminal: run  ntfy-connector confirm-sub {slot}  there yourself.\n"
                                    "  When it finishes it prints one line to send back to the agent (without herdr nothing tells the agent the result).\n"
                                    "  If the user already subscribed on the phone, add --subscribed (no topic shown, works outside a terminal); to only print the topic use --show-topic (it will land in the caller's output)"),
         "cli.confirm.guide": "Subscribe to the topic above in the ntfy app on your phone. Once subscribed, press Enter and I'll send a test notification with a button — when it pops up, tap the button and the check is done.\n⚠️ Don't close this pane / terminal before pressing Enter and tapping the button: closing it cancels the check and you start over.",
@@ -558,12 +558,12 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.confirm.sent": "test notification sent — tap “{button}” in the phone's notification shade (within {seconds} s)…",
         "cli.confirm.done": "✅ {slot} confirmed: the phone gets notifications; the agent can use it for questions from now on",
         "cli.confirm.done_hint": "You can close this terminal window now. Back in your agent's session, send it this line:\n  {prompt}",
-        "cli.confirm.done_prompt": "agent-ntfy: {slot} is confirmed; you can use it for questions now",
+        "cli.confirm.done_prompt": "ntfy-connector: {slot} is confirmed; you can use it for questions now",
         "cli.confirm.report.confirmed": "{slot} is confirmed: the phone gets notifications; you can use it for questions now",
         "cli.confirm.report.timeout": "{slot} check timed out: the user did not press Enter / tap the button in time; run confirm-sub {slot} again to retry",
         "cli.confirm.report.cancelled": "{slot} check was interrupted (Ctrl-C); run confirm-sub {slot} again to retry",
         "cli.confirm.report.failed": "{slot} check failed (exit code {rc}); the error is in that pane",
-        "cli.confirm.report_failed": "could not send the result back to the agent in pane {pane} ({why}); it can check with agent-ntfy slots",
+        "cli.confirm.report_failed": "could not send the result back to the agent in pane {pane} ({why}); it can check with ntfy-connector slots",
         "cli.confirm.timeout": "no button tap within {seconds} s; confirmation not completed. Nothing popped up? Go through the README troubleshooting list and run it again",
         "cli.confirm.timeout_no_enter": "no Enter within {seconds} s; confirmation not completed and the test notification was never sent. Subscribe first, then run it again",
         "cli.confirm.disconnected": "connection to the daemon lost; confirmation not completed",
@@ -577,7 +577,7 @@ TEXTS: dict[str, dict[str, str]] = {
                                     "  2. once subscribed, press Enter in that pane — a test notification with a button arrives\n"
                                     "  3. tap the button in the notification shade — the result comes back to you as one line [ntfy-connector] slotN is confirmed / timed out / interrupted; no need to poll slots\n"
                                     "  ⚠️ don't close that pane before pressing Enter and tapping the button (closing cancels the check and nothing is sent back); on success the pane offers to close itself"),
-        "cli.add_slot.done": "added {slot} (not yet confirmed to reach the phone). Next: run  agent-ntfy confirm-sub {slot}  in your own terminal",
+        "cli.add_slot.done": "added {slot} (not yet confirmed to reach the phone). Next: run  ntfy-connector confirm-sub {slot}  in your own terminal",
         "cli.status.not_running": "daemon: not running",
         "cli.status.no_socket": "daemon: no answer (pid file {pid} still there; it may have died)",
         "cli.status.transport": "  transport: {transport}",
@@ -592,8 +592,8 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.detach.already": "a daemon is already running",
         "cli.detach.died": "the daemon did not come up (exit code {rc}), see {log}",
         "cli.detach.started": "daemon: started in the background, pid {pid} (log {log})",
-        "cli.detach.not_ready": "daemon (pid {pid}) not ready within 5 s, still starting; check later with agent-ntfy daemon --status, log {log}",
-        "validate.header": "agent-ntfy ask: input validation failed ({n} issue(s)); fix them all and retry. Message NOT sent.",
+        "cli.detach.not_ready": "daemon (pid {pid}) not ready within 5 s, still starting; check later with ntfy-connector daemon --status, log {log}",
+        "validate.header": "ntfy-connector ask: input validation failed ({n} issue(s)); fix them all and retry. Message NOT sent.",
         "validate.field.body": "body",
         "validate.hint.title": "the one-line hook shown in the notification shade — the preview shows nothing else",
         "validate.hint.doing": "one sentence: which task this is",
