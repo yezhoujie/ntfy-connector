@@ -124,7 +124,8 @@ class KeychainStore(SecretStore):
           60 个 topic 就触发。与其在池子长到一定程度时静默毁掉密钥，不如让 ps 看几十毫秒
         · 回读比对是为了不依赖 security 的退出码语义：写入「成功」而内容不对，内存里的池子
           与钥匙串就分叉了，重启后凭空少槽位
-    find-generic-password 找不到条目时退出码 44，据此区分「池子不存在」与「命令本身跑挂了」——
+    删：security delete-generic-password -a <账户> -s <服务名>（只有把旧名字的条目搬到新名字时用）
+    find-generic-password / delete-generic-password 找不到条目时退出码 44，据此区分「池子不存在」与「命令本身跑挂了」——
     后者绝不能当成不存在，否则会用 -U 把用户现有的池子整个换掉。
     """
 
@@ -174,6 +175,12 @@ class KeychainStore(SecretStore):
             self._fail("keychain.write_failed", r)
         if self.load() != topics:
             raise StateError("keychain.readback_mismatch", service=self.service)
+
+    def delete(self):
+        """删掉整个条目（security delete-generic-password）。条目本来就不在（退出码 44）视为已删；别的非零退出码报 keychain.delete_failed。"""
+        r = self._security(["security", "delete-generic-password", "-a", self.account, "-s", self.service])
+        if r.returncode not in (0, self.NOT_FOUND_RC):
+            self._fail("keychain.delete_failed", r)
 
 
 def _write_private(path: Path, data: bytes) -> None:
@@ -313,7 +320,7 @@ STORE_CHOICES = ("keychain", "file", "dpapi")
 
 def default_store(home: Path) -> SecretStore:
     """按 NTFY_CONNECTOR_STORE（keychain / file / dpapi）选实现，非法值响亮报错；不设就按平台：darwin 钥匙串、win32 DPAPI、其余 0600 文件。
-    环境变量只在这里读一次——本模块唯一的例外，且只被 daemon 入口调用。"""
+    环境变量只在这里读一次——本模块唯一的例外；调用方是 daemon 入口，以及首次运行的迁移逻辑（它只用返回值判断选的是不是钥匙串）。"""
     choice = os.environ.get(STORE_ENV) or None  # 空串当没给
     if choice is None:
         choice = "keychain" if sys.platform == "darwin" else "dpapi" if sys.platform == "win32" else "file"

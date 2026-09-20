@@ -59,6 +59,7 @@ from typing import NamedTuple
 
 import inject
 import ipc
+import migrate
 import platform_
 import projstate
 import texts
@@ -243,13 +244,16 @@ def require_confirmed(root: Path | None = None) -> bool:
 
 
 def project_root_or_none(lang: str, *, not_sent: bool = False) -> Path | None:
-    """定项目根；定不出来（cwd 已被删）就打一句人读报错、返回 None，调用方退 3——不能让 traceback 退 1 冒充「输入无效」。"""
+    """定项目根；定不出来（cwd 已被删）就打一句人读报错、返回 None，调用方退 3——不能让 traceback 退 1 冒充「输入无效」。
+    定出来了就顺手把旧版留下的 .agent-ntfy/ 改名成 .ntfy-connector/：状态文件要在这条命令读它之前就在新名字下。"""
     try:
-        return projstate.project_root()
+        root = projstate.project_root()
     except OSError as e:
         message = texts.t("cli.project.unresolved", lang, error=e.strerror or e)
         err(texts.t("cli.ask.error_not_sent", lang, message=message) if not_sent else message)
         return None
+    migrate.migrate_project_state(root, lang=lang, err=err)
+    return root
 
 
 # ---------------------------------------------------------------- ask
@@ -444,6 +448,10 @@ def report_confirm_result(pane: str, slot: str, rc: int, lang: str) -> None:
 
 
 def cmd_confirm_sub(args) -> int:
+    try:
+        migrate.migrate_project_state(projstate.project_root(), lang=args.lang, err=err)  # 过闸后回写状态文件之前先把旧目录改名
+    except OSError:
+        pass  # cwd 没了：回写那一步（note_confirmed）同样会静默跳过，这里不必报
     rc = _confirm_sub(args)
     if args.show_topic:
         return rc
@@ -593,6 +601,7 @@ def cmd_away(args) -> int:
     lang = args.lang
     try:
         root = projstate.project_root()
+        migrate.migrate_project_state(root, lang=lang, err=err)  # 与 project_root_or_none 同一件事：读状态文件之前先把旧目录改名
         if args.action == "on":
             return away_on(Path(args.home), root, lang)
         if args.action == "off":
@@ -905,6 +914,11 @@ def main(argv: list[str] | None = None) -> int:
     except ipc.BadTransport as e:
         err(texts.t("cli.bad_env_ipc", lang, value=repr(e.value)))
         return EXIT_INVALID
+    try:
+        migrate.run(Path(args.home), lang=lang, err=err)  # 旧版留下的目录 / 钥匙串条目搬到新名字下；--help 到不了这里
+    except migrate.LegacyDaemonRunning as e:
+        err(texts.t("migrate.old_daemon_running", lang, legacy_home=e.legacy_home))
+        return EXIT_NEEDS_HUMAN  # 要人去停旧 daemon
     return args.fn(args)
 
 

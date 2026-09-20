@@ -36,7 +36,8 @@ class DaemonProcessTest(unittest.TestCase):
         self.home = Path(tempfile.mkdtemp(prefix="an-")) / "h"  # 短路径：unix 传输下 socket 路径有长度上限
         self.addCleanup(shutil.rmtree, self.home.parent, ignore_errors=True)
         self.env = {k: v for k, v in os.environ.items() if k != "NTFY_CONNECTOR_SMOKE"}
-        self.env.update({"NTFY_CONNECTOR_STORE": "file", "NTFY_CONNECTOR_URL": "http://127.0.0.1:1", "NTFY_CONNECTOR_LANG": "zh"})
+        self.env.update({"NTFY_CONNECTOR_STORE": "file", "NTFY_CONNECTOR_URL": "http://127.0.0.1:1", "NTFY_CONNECTOR_LANG": "zh",
+                         "HOME": str(self.home.parent), "USERPROFILE": str(self.home.parent)})  # 子进程的 ~ 是临时目录：入口的迁移碰不到开发者真实的 ~/.agent-ntfy
         self.procs: list[subprocess.Popen] = []
         self.stderr_path = self.home.parent / "daemon.stderr"
 

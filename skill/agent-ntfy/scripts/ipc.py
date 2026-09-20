@@ -17,7 +17,9 @@ daemon.port 读出的 token：客户端侧 stamp() 加上它，daemon 侧 authen
 靠文件系统权限，不用 token（token_of() 返回 None，stamp() 原样返回）。
 
 probe() 是静默探活：任何失败（没有端点、连接被拒、超时、回复解析不了）都报告为 None，不写
-stderr——调用方拿它做分支，不是当错误处理。
+stderr——调用方拿它做分支，不是当错误处理。connect() / probe() 的 via 参数可以指定传输、不看
+NTFY_CONNECTOR_IPC；probe_any() 则按目录里实际存在的端点文件逐种传输探——给「另一个版本 / 另一种
+传输配置起的 daemon 还在不在」这类问题用，那种 daemon 的传输不由本进程的环境变量决定。
 """
 
 import errno
@@ -200,8 +202,8 @@ def listen(home: Path) -> tuple[socket.socket, Callable[[], None]]:
     return _listen_unix(home) if transport(home) == "unix" else _listen_tcp(home)
 
 
-def connect(home: Path) -> socket.socket:
-    if transport(home) == "unix":
+def connect(home: Path, via: str | None = None) -> socket.socket:
+    if (via or transport(home)) == "unix":
         s = _unix_socket()
         try:
             s.connect(str(sock_path(home)))
@@ -225,15 +227,15 @@ def connect(home: Path) -> socket.socket:
     return s
 
 
-def token_of(home: Path) -> str | None:
-    if transport(home) != "tcp":
+def token_of(home: Path, via: str | None = None) -> str | None:
+    if (via or transport(home)) != "tcp":
         return None
     parsed = _parse_port_file(port_path(home))
     return parsed[1] if parsed is not None else None
 
 
-def stamp(req: dict, home: Path) -> dict:
-    token = token_of(home)
+def stamp(req: dict, home: Path, via: str | None = None) -> dict:
+    token = token_of(home, via)
     if token is None:
         return req
     return {**req, "token": token}
@@ -252,14 +254,14 @@ def wake_pair() -> tuple[socket.socket, socket.socket]:
     return r, w
 
 
-def probe(home: Path, timeout: float = PROBE_TIMEOUT) -> dict | None:
+def probe(home: Path, timeout: float = PROBE_TIMEOUT, via: str | None = None) -> dict | None:
     try:
-        s = connect(home)
+        s = connect(home, via)
     except OSError:
         return None
     try:
         s.settimeout(timeout)
-        line = json.dumps(stamp({"cmd": "status"}, home), ensure_ascii=False) + "\n"
+        line = json.dumps(stamp({"cmd": "status"}, home, via), ensure_ascii=False) + "\n"
         s.sendall(line.encode("utf-8"))
         buf = b""
         while b"\n" not in buf:
@@ -274,3 +276,16 @@ def probe(home: Path, timeout: float = PROBE_TIMEOUT) -> dict | None:
     finally:
         s.close()
     return ev if isinstance(ev, dict) and ev.get("event") == "status" else None
+
+
+def probe_any(home: Path, timeout: float = PROBE_TIMEOUT) -> dict | None:
+    """不看 NTFY_CONNECTOR_IPC，目录里哪种端点文件在就按哪种传输探（两种都在就都探）；本平台没有 AF_UNIX 时 sock 文件只当残骸。
+    第一个有应答的即返回；都没有（或都是残骸）返回 None。"""
+    for via, path in (("unix", sock_path(home)), ("tcp", port_path(home))):
+        if via == "unix" and AF_UNIX is None:
+            continue
+        if path.exists():
+            ev = probe(home, timeout, via)
+            if ev is not None:
+                return ev
+    return None
