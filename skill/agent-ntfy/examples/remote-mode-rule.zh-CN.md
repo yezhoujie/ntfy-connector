@@ -6,7 +6,7 @@
 >
 > 下文 `$AN` = `python3 <skill dir>/scripts/ntfy_connector.py`；Claude Code 全局安装时 `<skill dir>` 是 `~/.claude/skills/agent-ntfy`。怎么写一张提问卡看 SKILL.md。
 
-## 状态在哪：`<项目根>/.agent-ntfy/state.json`（CLI 写，你只读）
+## 状态在哪：`<项目根>/.ntfy-connector/state.json`（CLI 写，你只读）
 - **会话开始 / 上下文被清空或重置后**，先 `$AN away status --json`：`away: true` ⇒ 本项目已在远程模式，照「模式内」办；文件不存在或 `false` ⇒ 正常终端交互。
 - 字段：`away`（开关）· `slot`（本项目当前租的槽位，`null` = 还没租）· `confirmed`（那个槽位过没过闸）· `target`（谁写的）。**里面永远没有 topic 名。**
 

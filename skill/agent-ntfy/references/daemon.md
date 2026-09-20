@@ -67,7 +67,7 @@ agent-ntfy daemon --stop      # asks the daemon over the endpoint to shut down, 
 - Subscription states: `connected` / `connecting` (just started) / `down for N s` (reconnecting with backoff 1 → 30 s). After 3 consecutive failures or 60 s down, every waiting `ask` gets a `note:` line on stderr; another when it is back.
 - **Cold start does not replay.** Only messages arriving after the connection is up are seen; a question does not survive a daemon restart (its `ask` already exited 3).
 - **Stopping** ends every waiting `ask` with rc 3 (`the daemon is stopping; the question went out …`). The cards on the phone are left as they are: the human may still answer, and that answer will be injected after the restart.
-- Files under `NTFY_CONNECTOR_HOME` (default `~/.agent-ntfy/`, directory mode 0700 on POSIX; on Windows the
+- Files under `NTFY_CONNECTOR_HOME` (default `~/.ntfy-connector/`, directory mode 0700 on POSIX; on Windows the
   daemon tries to restrict the directory's ACL to the current user — on Python < 3.13 via `icacls`, best
   effort, a failure is only logged):
 
@@ -216,7 +216,7 @@ Same variables as README §9 (plus `NTFY_CONNECTOR_OFFLINE`), kept here so the a
 
 | variable | default | effect |
 |---|---|---|
-| `NTFY_CONNECTOR_HOME` | `~/.agent-ntfy` | state directory (endpoint, pid, log, leases, and the pool file when a file store is used). With the unix transport keep it short: socket paths have a system-dependent length limit |
+| `NTFY_CONNECTOR_HOME` | `~/.ntfy-connector` | state directory (endpoint, pid, log, leases, and the pool file when a file store is used). With the unix transport keep it short: socket paths have a system-dependent length limit |
 | `NTFY_CONNECTOR_LANG` | (system locale, else `en`) | language of the fixed wording for everything without an `ask` context, and the fallback when `ask` / `notify` give no `lang`. Resolution order: `--lang` > this variable > system locale (`LC_ALL` / `LC_MESSAGES` / `LANG` starting with `zh`, or a Chinese Windows locale ⇒ `zh`) > `en`. `zh` / `en` only; any other value exits 1 |
 | `NTFY_CONNECTOR_TARGET` | – | overrides the lease holder (normally `proj:<project root>`); the same value reuses the same slot |
 | `NTFY_CONNECTOR_URL` | `https://ntfy.sh` | another ntfy instance (self-hosted). ntfy.sh's free tier allows about 250 messages per day per source IP, shared by all of your questions, notifications, updates and receipts |
@@ -230,7 +230,7 @@ Same variables as README §9 (plus `NTFY_CONNECTOR_OFFLINE`), kept here so the a
 `--home <dir>` on the command line overrides `NTFY_CONNECTOR_HOME` and must come before the subcommand.
 The `[tag]` in card titles is the project directory's name (cut to 41 bytes), not the pane id.
 
-### The per-project state file: `<project root>/.agent-ntfy/state.json`
+### The per-project state file: `<project root>/.ntfy-connector/state.json`
 
 Written by the CLI, read by the agent (and by whatever rule the user keeps about remote mode). Project
 root is the git toplevel, or the cwd when not in a git repository; a worktree or a submodule is its own

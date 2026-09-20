@@ -1,4 +1,4 @@
-"""项目级状态文件 `.agent-ntfy/state.json` 与 `away` 子命令：目录落在哪、自忽略、三态切换、各命令的回写。不打真网。"""
+"""项目级状态文件 `.ntfy-connector/state.json` 与 `away` 子命令：目录落在哪、自忽略、三态切换、各命令的回写。不打真网。"""
 
 import contextlib
 import json
@@ -230,7 +230,7 @@ class AwayCommandTest(unittest.TestCase):
             self.assertIn(ta.Z("cli.away.state.off"), out)
             self.assertIn(ta.Z("cli.away.slot.none"), out)
 
-    # 状态目录读写不了（.agent-ntfy 是个普通文件）：第一步就人读报错、退 3，不是 traceback；daemon 不起、herdr 不碰
+    # 状态目录读写不了（.ntfy-connector 是个普通文件）：第一步就人读报错、退 3，不是 traceback；daemon 不起、herdr 不碰
     def test_on_reports_io_failure(self):
         root = plain_dir(self)
         (root / projstate.DIR_NAME).write_text("not a dir", encoding="utf-8")
@@ -299,7 +299,7 @@ class AwayCommandTest(unittest.TestCase):
 
 
 class HooksTest(unittest.TestCase):
-    """ask / confirm-sub / release 只在 `.agent-ntfy/` 已存在时回写。"""
+    """ask / confirm-sub / release 只在 `.ntfy-connector/` 已存在时回写。"""
 
     def state(self, root):
         return json.loads((root / projstate.DIR_NAME / "state.json").read_text(encoding="utf-8"))

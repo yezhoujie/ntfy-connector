@@ -233,7 +233,7 @@ class PaneHelpersTest(unittest.TestCase):
     # pane run 把各参数按空格拼起来原样敲进窗格 shell、不做引用（实测）：argv 逐个 quote 后合成一个参数传过去
     def test_run_in_pane_quotes_argv_into_one_shell_word_list(self):
         fake = FakeHerdr()
-        argv = ["/usr/bin/python3", "/w/my proj/ntfy_connector.py", "--home", "/Users/x/.agent-ntfy", "confirm-sub", "slot2", "it's"]
+        argv = ["/usr/bin/python3", "/w/my proj/ntfy_connector.py", "--home", "/Users/x/.ntfy-connector", "confirm-sub", "slot2", "it's"]
         self.assertTrue(inject.run_in_pane("wD:p7", argv, run=fake))
         self.assertEqual(len(fake.calls), 1)
         self.assertEqual(fake.calls[0][:4], ["herdr", "pane", "run", "wD:p7"])

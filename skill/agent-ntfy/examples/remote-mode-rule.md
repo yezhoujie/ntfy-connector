@@ -8,7 +8,7 @@
 > Below, `$AN` = `python3 <skill dir>/scripts/ntfy_connector.py`; with a global Claude Code install `<skill dir>` is
 > `~/.claude/skills/agent-ntfy`. How to write a question card is in SKILL.md.
 
-## Where the state lives: `<project root>/.agent-ntfy/state.json` (written by the CLI; you only read it)
+## Where the state lives: `<project root>/.ntfy-connector/state.json` (written by the CLI; you only read it)
 - **At session start, and after your context was cleared or reset**, run `$AN away status --json` first: `away: true` ⇒ this project is already in remote mode, follow "While in remote mode"; file absent or `false` ⇒ normal terminal interaction.
 - Fields: `away` (the switch) · `slot` (the slot this project currently leases, `null` = none yet) · `confirmed` (whether that slot passed the reachability check) · `target` (who wrote it). **The topic name is never in it.**
 

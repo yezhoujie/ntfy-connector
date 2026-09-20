@@ -60,7 +60,7 @@ class StateTest(unittest.TestCase):
     # topic 命名符合 <前缀>-<20 位随机串>，前缀可配置
     def test_topic_naming_with_configurable_prefix(self):
         for t in self.state.topics():
-            self.assertRegex(t, r"^agent-ntfy-[a-z0-9]{20}$")
+            self.assertRegex(t, r"^ntfy-connector-[a-z0-9]{20}$")
         custom = State(MemoryStore(), Path(self.tmp.name) / "other.json", prefix="team-x")
         for t in custom.topics():
             self.assertRegex(t, r"^team-x-[a-z0-9]{20}$")
@@ -73,7 +73,7 @@ class StateTest(unittest.TestCase):
     # 末尾带换行的名字一律拒绝：re.match 配 $ 会放过 "xxx\n"，而它会原样进 topic 名 / 钥匙串参数
     def test_names_with_trailing_newline_rejected(self):
         with self.assertRaises(state.StateError):
-            State(MemoryStore(), Path(self.tmp.name) / "bad.json", prefix="agent-ntfy\n")
+            State(MemoryStore(), Path(self.tmp.name) / "bad.json", prefix="ntfy-connector\n")
         with self.assertRaises(state.StateError):
             self.state.slot_state("slot1\n")
         with self.assertRaises(state.StateError):
@@ -115,7 +115,7 @@ class StateTest(unittest.TestCase):
             self.assertEqual(slot, f"slot{n}")
             self.assertEqual(len(self.state.topics()), n)
             self.assertEqual(self.store.topics, self.state.topics())  # 已写回密钥存储
-        self.assertRegex(self.state.topic_of("slot25"), r"^agent-ntfy-[a-z0-9]{20}$")
+        self.assertRegex(self.state.topic_of("slot25"), r"^ntfy-connector-[a-z0-9]{20}$")
         self.assertEqual(self.state.slot_state("slot25"), SlotState.UNASSIGNED)
         # 全满后新建的槽位可以直接租到
         self.lease_all()
@@ -290,7 +290,7 @@ class KeychainStoreTest(unittest.TestCase):
     """只检查本模块自己的逻辑：命令怎么拼、返回码怎么判、回读怎么比。security 本身不在这里跑。"""
 
     SVC = "NTFY_CONNECTOR_TEST"
-    TOPICS = ["agent-ntfy-abcdefghijklmnopqrst", "agent-ntfy-0123456789abcdefghij"]
+    TOPICS = ["ntfy-connector-abcdefghijklmnopqrst", "ntfy-connector-0123456789abcdefghij"]
 
     def store(self, run):
         s = state.KeychainStore(service=self.SVC)
@@ -315,14 +315,14 @@ class KeychainStoreTest(unittest.TestCase):
     def test_load_parses_entry_and_queries_by_account_and_service(self):
         run = FakeRun(**{"find-generic-password": (0, json.dumps(self.TOPICS) + "\n", "")})
         self.assertEqual(self.store(run).load(), self.TOPICS)
-        self.assertEqual(run.calls[0], ["security", "find-generic-password", "-a", "agent-ntfy", "-s", self.SVC, "-w"])
+        self.assertEqual(run.calls[0], ["security", "find-generic-password", "-a", "ntfy-connector", "-s", self.SVC, "-w"])
 
     def test_save_writes_hex_payload_then_reads_back(self):
         run = FakeRun(**{"add-generic-password": (0, "", ""),
                          "find-generic-password": (0, json.dumps(self.TOPICS) + "\n", "")})
         self.store(run).save(self.TOPICS)
         add, readback = run.calls
-        self.assertEqual(add[:8], ["security", "add-generic-password", "-U", "-a", "agent-ntfy", "-s", self.SVC, "-X"])
+        self.assertEqual(add[:8], ["security", "add-generic-password", "-U", "-a", "ntfy-connector", "-s", self.SVC, "-X"])
         self.assertEqual(json.loads(bytes.fromhex(add[8]).decode("utf-8")), self.TOPICS)
         self.assertEqual(readback[1], "find-generic-password")
 
@@ -360,7 +360,7 @@ class KeychainStoreTest(unittest.TestCase):
 class FileStoreTest(unittest.TestCase):
     """0600 明文文件实现（Linux 与兜底）：读写 / 不存在 / 坏内容 / 权限位 / 文件层错误都包成 StateError。"""
 
-    TOPICS = ["agent-ntfy-abcdefghijklmnopqrst", "agent-ntfy-0123456789abcdefghij"]
+    TOPICS = ["ntfy-connector-abcdefghijklmnopqrst", "ntfy-connector-0123456789abcdefghij"]
 
     def setUp(self):
         self.home = Path(tempfile.mkdtemp(prefix="an-")) / "home"
@@ -424,7 +424,7 @@ def fake_unprotect(data: bytes) -> bytes:
 class DpapiStoreTest(unittest.TestCase):
     """DPAPI 实现的模块逻辑：编解码经注入的 protect / unprotect；ctypes 那两个真函数只在 Windows CI 上 smoke。"""
 
-    TOPICS = ["agent-ntfy-abcdefghijklmnopqrst", "agent-ntfy-0123456789abcdefghij"]
+    TOPICS = ["ntfy-connector-abcdefghijklmnopqrst", "ntfy-connector-0123456789abcdefghij"]
 
     def setUp(self):
         self.home = Path(tempfile.mkdtemp(prefix="an-")) / "home"
@@ -573,7 +573,7 @@ class KeychainSmokeTest(unittest.TestCase):
     """对真实钥匙串走一遍：不存在 → 建池 → 回读一致 → 加槽位到超过 4KB 也不丢 → 删条目 → 确认删干净。"""
 
     def test_roundtrip_on_real_keychain(self):
-        service = f"agent-ntfy-smoke-{secrets.token_hex(4)}"
+        service = f"ntfy-connector-smoke-{secrets.token_hex(4)}"
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
 

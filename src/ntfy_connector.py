@@ -36,7 +36,7 @@ notify 的退出码同 ask 的 0 / 1 / 3 / 4（0 = 已发出），没有 2——
 租约主体是项目（git 仓根，否则 cwd）：同一项目里任意窗格 / 会话共用一个槽位。每次跑命令都把本项目租约的
 注入窗格刷新成当前 herdr 窗格（不在 herdr 里 ⇒ 清空，手机消息走「未送达」回执）。卡片 Title 的 [<tag>] 是项目目录名。
 
-环境变量: NTFY_CONNECTOR_HOME（默认 ~/.agent-ntfy）· HERDR_PANE_ID / HERDR_ENV（在 herdr 里时自动带上窗格标识）
+环境变量: NTFY_CONNECTOR_HOME（默认 ~/.ntfy-connector）· HERDR_PANE_ID / HERDR_ENV（在 herdr 里时自动带上窗格标识）
           NTFY_CONNECTOR_TARGET（覆盖租约主体「我是谁」，同一个值复用同一个槽位；herdr 内外都生效）
           NTFY_CONNECTOR_LANG（固定文案的语言 zh / en；--lang 压过它；ask 的 JSON 里给了 lang 以它为准；都没有就看系统 locale，再缺省 en）
 
@@ -65,7 +65,7 @@ import texts
 import validate
 
 PROG = "agent-ntfy"
-HOME = Path(os.environ.get("NTFY_CONNECTOR_HOME", "~/.agent-ntfy")).expanduser()
+HOME = Path(os.environ.get("NTFY_CONNECTOR_HOME", "~/.ntfy-connector")).expanduser()
 DEFAULT_TIMEOUT = 12 * 3600
 EXIT_REPLY, EXIT_INVALID, EXIT_TIMEOUT, EXIT_CHANNEL, EXIT_NEEDS_HUMAN, EXIT_INTERRUPTED = 0, 1, 2, 3, 4, 130
 EXIT_SENT = EXIT_REPLY  # notify 的 0：发出去了（它不等回复）
@@ -584,7 +584,7 @@ def cmd_add_slot(args) -> int:
 # ---------------------------------------------------------------- away：项目级状态文件
 
 def cmd_away(args) -> int:
-    """远程交互模式开关。状态落在项目根 .agent-ntfy/state.json（不含 topic 名），给 agent 在任何会话里读。
+    """远程交互模式开关。状态落在项目根 .ntfy-connector/state.json（不含 topic 名），给 agent 在任何会话里读。
 
     on 是一站式：daemon 没跑就起（herdr 里开窗格起，否则脱离会话起）→ 保证有能用的槽位（没有已过闸的就开确认窗格）→ 才写文件。
     status 以 daemon 为准校对：经 slots 反查本项目真实租着哪个槽位，与文件不一致就改写并提示；daemon 没跑就照旧读文件、标「未校对」。

@@ -127,7 +127,7 @@ Everything else is automatic: the topic pool is created on first use, the daemon
 **Step 1 — start the daemon.** It must outlive the agent, so it runs on its own:
 
 ```bash
-agent-ntfy daemon --detach        # any platform:  daemon: started in the background, pid 12345 (log ~/.agent-ntfy/daemon.log)
+agent-ntfy daemon --detach        # any platform:  daemon: started in the background, pid 12345 (log ~/.ntfy-connector/daemon.log)
 agent-ntfy daemon                 # inside herdr: run it in a spare pane instead, so it stays visible
 agent-ntfy daemon --status        # daemon: pid 12345  subscription: connected  pending questions: 0  confirming: 0  slots: 5  transport: unix
 ```
@@ -138,8 +138,8 @@ Paths are shown with `~` here; the CLI prints them expanded. If `--detach` repor
 
 ```
 $ agent-ntfy confirm-sub slot1
-topic for slot1: agent-ntfy-xxxxxxxxxxxxxxxxxxxx
-subscribe URL: https://ntfy.sh/agent-ntfy-xxxxxxxxxxxxxxxxxxxx
+topic for slot1: ntfy-connector-xxxxxxxxxxxxxxxxxxxx
+subscribe URL: https://ntfy.sh/ntfy-connector-xxxxxxxxxxxxxxxxxxxx
 Subscribe to the topic above in the ntfy app on your phone. Once subscribed, press Enter and I'll send a test notification with a button — when it pops up, tap the button and the check is done.
 ⚠️ Don't close this pane / terminal before pressing Enter and tapping the button: closing it cancels the check and you start over.
 Press Enter once subscribed…
@@ -213,10 +213,10 @@ Other Android ROMs have the same switches under different names; only MIUI has b
 ## 7. Security
 
 - **The topic name is the password.** Anyone who knows it can read every question, see every reply, and — with herdr — type instructions straight into your agent. There is no second lock by design (the channel does not filter content). Keep it off screenshots, out of chat, out of git.
-- Topics are 20 random lowercase letters and digits after the prefix (about 2^103 possibilities). Where the pool is stored depends on the platform (`NTFY_CONNECTOR_STORE`, §9): the **macOS keychain** (per-app authorisation); on **Windows** a DPAPI-encrypted file `~/.agent-ntfy/topics.dpapi` (decryptable only by the same Windows user on the same machine); elsewhere a plain `0600` file `~/.agent-ntfy/topics.json`. The last two can be read by any process running as your user — a wider boundary than the keychain; accept it or self-host ntfy. The lease file (`~/.agent-ntfy/leases.json`: slot numbers, holder ids, timestamps, pane ids), the per-project state file and the daemon log never contain topic names or message text.
+- Topics are 20 random lowercase letters and digits after the prefix (about 2^103 possibilities). Where the pool is stored depends on the platform (`NTFY_CONNECTOR_STORE`, §9): the **macOS keychain** (per-app authorisation); on **Windows** a DPAPI-encrypted file `~/.ntfy-connector/topics.dpapi` (decryptable only by the same Windows user on the same machine); elsewhere a plain `0600` file `~/.ntfy-connector/topics.json`. The last two can be read by any process running as your user — a wider boundary than the keychain; accept it or self-host ntfy. The lease file (`~/.ntfy-connector/leases.json`: slot numbers, holder ids, timestamps, pane ids), the per-project state file and the daemon log never contain topic names or message text.
 - **Content travels in clear** through ntfy.sh. Questions describe your project; do not put secrets in them.
-- To rotate all topics: on macOS delete the keychain item (account `agent-ntfy`, service `NTFY_CONNECTOR_TOPICS`, e.g. `security delete-generic-password -a agent-ntfy -s NTFY_CONNECTOR_TOPICS`); elsewhere delete `topics.json` / `topics.dpapi`. Then restart the daemon: a new pool is generated, old leases are discarded, every slot needs confirming again.
-- **Do not create the keychain item by hand.** The program looks it up by account `agent-ntfy` *and* service `NTFY_CONNECTOR_TOPICS`; an item with any other account name is invisible to it, so it would silently create a second pool while you believe yours is in use.
+- To rotate all topics: on macOS delete the keychain item (account `ntfy-connector`, service `NTFY_CONNECTOR_TOPICS`, e.g. `security delete-generic-password -a ntfy-connector -s NTFY_CONNECTOR_TOPICS`); elsewhere delete `topics.json` / `topics.dpapi`. Then restart the daemon: a new pool is generated, old leases are discarded, every slot needs confirming again.
+- **Do not create the keychain item by hand.** The program looks it up by account `ntfy-connector` *and* service `NTFY_CONNECTOR_TOPICS`; an item with any other account name is invisible to it, so it would silently create a second pool while you believe yours is in use.
 
 ## 8. Known limits
 
@@ -240,14 +240,14 @@ Tested on real sessions: **claude** (asking and injection, including replay afte
 
 | variable | default | effect |
 |---|---|---|
-| `NTFY_CONNECTOR_HOME` | `~/.agent-ntfy` | state directory (dir 0700, files 0600 where the platform has such bits): `daemon.sock` or `daemon.port` (see `NTFY_CONNECTOR_IPC`), `daemon.pid`, `daemon.log`, `leases.json`, and the topic pool file where one is used (`topics.json` / `topics.dpapi`, see `NTFY_CONNECTOR_STORE`). With the Unix-socket transport keep the path short: the socket path has a system-dependent length limit; too deep and the daemon refuses to start with `cannot listen for IPC: … Unix socket paths have a length limit (system-dependent); pick a shorter NTFY_CONNECTOR_HOME` |
+| `NTFY_CONNECTOR_HOME` | `~/.ntfy-connector` | state directory (dir 0700, files 0600 where the platform has such bits): `daemon.sock` or `daemon.port` (see `NTFY_CONNECTOR_IPC`), `daemon.pid`, `daemon.log`, `leases.json`, and the topic pool file where one is used (`topics.json` / `topics.dpapi`, see `NTFY_CONNECTOR_STORE`). With the Unix-socket transport keep the path short: the socket path has a system-dependent length limit; too deep and the daemon refuses to start with `cannot listen for IPC: … Unix socket paths have a length limit (system-dependent); pick a shorter NTFY_CONNECTOR_HOME` |
 | `NTFY_CONNECTOR_LANG` | (system locale, else `en`) | language of all fixed wording (card labels, button, receipts, CLI output, `--help`): `zh` or `en`. Resolution order: `--lang zh\|en` on the command line (a top-level option, before the subcommand) > this variable > the system locale (`LC_ALL` / `LC_MESSAGES` / `LANG` starting with `zh`, or a Chinese Windows locale, means `zh`) > `en`. Any other value is an error, not a fallback (unless `--lang` is given, which then wins and the variable is ignored). The agent can override it per question with the `lang` field. When the CLI itself opens a herdr pane (`away on` starting the daemon, `confirm-sub` opening the check for you) or detaches a daemon, it passes the resolved language along with `--lang`, so the pane's own shell does not decide the wording; only a daemon or command you start by hand in a pane inherits that pane's environment |
 | `NTFY_CONNECTOR_TARGET` | `proj:<project root>` | the identity that leases a slot (this is what `slots` shows as the holder). Set it to share one slot across projects or to keep one apart; the same value always reuses the same slot |
 | `NTFY_CONNECTOR_URL` | `https://ntfy.sh` | another ntfy instance, e.g. self-hosted |
 | `NTFY_CONNECTOR_IPC` | `unix` on macOS / Linux, `tcp` on Windows | transport between the CLI and the daemon. `unix`: a Unix socket `daemon.sock`, protected by file permissions. `tcp`: a loopback TCP port; `daemon.port` holds two lines — the port and a random token — and every request's first line carries the token (any local process could otherwise connect). A leftover endpoint file is treated as stale unless a connection to it succeeds ("port accepts a connection ⇒ an instance is already running"); if an unrelated process happens to hold that port, delete `daemon.port` and start the daemon again. `unix` is rejected on Windows; any other value is an error |
 | `NTFY_CONNECTOR_STORE` | `keychain` on macOS, `dpapi` on Windows, `file` elsewhere | where the topic pool lives: `keychain` (macOS `security` command; on other platforms the error says `the security command was not found (the keychain exists only on macOS); on other platforms set NTFY_CONNECTOR_STORE=file (Linux) or dpapi (Windows)`), `file` (`topics.json`, mode 0600), `dpapi` (`topics.dpapi`, Windows only — elsewhere `DPAPI is only available on Windows`). A pool file that cannot be decrypted (other user / other machine) or is not a JSON array of strings is reported with the file path; move the file away and restart to get a fresh pool (the phone must re-subscribe). See §7 for what each choice protects against |
 | `NTFY_CONNECTOR_KEYCHAIN` | `NTFY_CONNECTOR_TOPICS` | keychain service name of the topic pool (macOS, `keychain` store only) |
-| `NTFY_CONNECTOR_TOPIC_PREFIX` | `agent-ntfy` | prefix of newly generated topic names (`<prefix>-<20 random chars>`); letters, digits, `-`, `_`, at most 40 |
+| `NTFY_CONNECTOR_TOPIC_PREFIX` | `ntfy-connector` | prefix of newly generated topic names (`<prefix>-<20 random chars>`); letters, digits, `-`, `_`, at most 40 |
 | `HERDR_ENV`, `HERDR_PANE_ID` | set by herdr | detected, never set by you: inside herdr, `ask`, `notify`, `slots`, `release` (no argument), `away on` and `away status` record the current pane on the project's lease, and phone messages are injected there (`confirm-sub`, `release <slot>`, `add-slot`, `daemon`, `away off` do not touch it) |
 
 `--home <dir>` on the command line (before the subcommand) overrides `NTFY_CONNECTOR_HOME`.
@@ -263,7 +263,7 @@ agent-ntfy away off       # you are back
 agent-ntfy away status    # in words; add --json for the raw file
 ```
 
-`away on` is a one-stop command. It starts the daemon if none answers (inside herdr in a new pane, otherwise with `--detach`), leases a slot for the project on the spot — the one it already holds, else a confirmed idle slot, else the lowest unconfirmed idle slot, which it then sends through the reachability check (inside herdr it opens a confirmation pane, tells the agent which pane you should look at, and the pane sends the result back into the agent's session when the check ends; outside herdr it exits 4 and names the `confirm-sub` command to run) — and only then creates `<project root>/.agent-ntfy/` (project root = the git toplevel, else the current directory) with a self-ignoring `.gitignore` and a `state.json`:
+`away on` is a one-stop command. It starts the daemon if none answers (inside herdr in a new pane, otherwise with `--detach`), leases a slot for the project on the spot — the one it already holds, else a confirmed idle slot, else the lowest unconfirmed idle slot, which it then sends through the reachability check (inside herdr it opens a confirmation pane, tells the agent which pane you should look at, and the pane sends the result back into the agent's session when the check ends; outside herdr it exits 4 and names the `confirm-sub` command to run) — and only then creates `<project root>/.ntfy-connector/` (project root = the git toplevel, else the current directory) with a self-ignoring `.gitignore` and a `state.json`:
 
 ```json
 {"away": true, "slot": "slot2", "confirmed": true, "target": "proj:/path/to/project", "updated": "2026-09-13T21:04:11+08:00"}
@@ -277,7 +277,7 @@ prints `state file corrected from the daemon's leases`); with no daemon it print
 
 Run `away status --json` (the form meant for the agent) from the agent's herdr pane or a process started
 from it: like `ask` / `notify` / `slots` it records the current pane on the lease, and run from elsewhere it would point
-phone messages at the wrong pane. A typical rule reads: *if `.agent-ntfy/state.json` says `away: true`, use
+phone messages at the wrong pane. A typical rule reads: *if `.ntfy-connector/state.json` says `away: true`, use
 `agent-ntfy ask` for anything that needs my decision; run it in the background (a foreground tool call is
 killed after minutes and the card is cancelled); `away off` when done (it releases the slot).*
 
@@ -328,7 +328,7 @@ options:
   -h, --help            show this help message and exit
   --lang {zh,en}        wording language (zh / en; default: NTFY_CONNECTOR_LANG,
                         then the system locale, then en)
-  --home HOME           state directory (default ~/.agent-ntfy)
+  --home HOME           state directory (default ~/.ntfy-connector)
 
 usage: agent-ntfy ask [-h] [--timeout TIMEOUT]
 
@@ -406,7 +406,7 @@ npx skills add 'yezhoujie/agent-remote-communication-skills#agent-ntfy/v0.1.3' -
 
 **Upgrading a machine that already runs a daemon** — do the steps in this order:
 
-1. Stop the running daemon **with the CLI you have now**: `agent-ntfy daemon --stop`. If you already replaced the files, send it `kill -TERM <pid>` instead (the pid is in `~/.agent-ntfy/daemon.pid`). Reason: since 0.1.0 `--stop` asks the daemon over its socket; a daemon from an earlier version does not know that command, so the new CLI reports `did not acknowledge the stop` and exits 1.
+1. Stop the running daemon **with the CLI you have now**: `agent-ntfy daemon --stop`. If you already replaced the files, send it `kill -TERM <pid>` instead (the pid is in `~/.ntfy-connector/daemon.pid`). Reason: since 0.1.0 `--stop` asks the daemon over its socket; a daemon from an earlier version does not know that command, so the new CLI reports `did not acknowledge the stop` and exits 1.
 2. Update the files: `npx skills update` (or run the install command again, or copy the directory).
 3. Start the new daemon: `agent-ntfy daemon --detach`, then `agent-ntfy daemon --status` should show `transport: unix` (or `tcp` on Windows). A restart is required in any case: an earlier daemon ignores the fields the new CLI sends.
 4. Run `agent-ntfy slots`. Leases taken before 0.1.0 show a pane id such as `wG:p1` as holder instead of `proj:<path>`; free them with `NTFY_CONNECTOR_TARGET=<that holder> agent-ntfy release <slot>` (`release <slot>` only releases your own project's lease; `release` without argument only finds the current project's lease).
@@ -421,7 +421,7 @@ them (SKILL.md, "When to use"). Left alone, an agent uses agent-ntfy only when i
 skill exists, which is not what you want while you are away. The trigger policy belongs in the agent's
 **standing instructions** — the file it loads in every session — and it has to cover four moments:
 
-1. **Session start / context reset**: read `<project root>/.agent-ntfy/state.json` (`away status --json`);
+1. **Session start / context reset**: read `<project root>/.ntfy-connector/state.json` (`away status --json`);
    `away: true` means the human is away and every decision goes to the phone from now on.
 2. **The human leaves** ("I'm leaving, send it to my phone"): run `away on` while they are still at the
    keyboard and relay its output — the two taps on the phone (subscribe, press the button) cannot be done

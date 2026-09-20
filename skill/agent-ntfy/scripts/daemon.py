@@ -5,7 +5,7 @@
 
 只做通路：把提问送到手机、把人的话原样送回 ask；不解释内容、不代答。
 
-文件都在 NTFY_CONNECTOR_HOME（默认 ~/.agent-ntfy/，0700）：leases.json · daemon.sock（unix 传输）或 daemon.port（tcp 传输：端口 + token）·
+文件都在 NTFY_CONNECTOR_HOME（默认 ~/.ntfy-connector/，0700）：leases.json · daemon.sock（unix 传输）或 daemon.port（tcp 传输：端口 + token）·
 daemon.pid（只供人看：探活 / 停机都走 socket）· daemon.log（0600）。传输由 ipc 模块按 NTFY_CONNECTOR_IPC / 平台选；tcp 下每条请求的
 首行都要带 token，不符即拒绝。
 日志只写槽位名 / 消息 id / 事件类型 / 错误类别——topic 是密码，正文与回复是用户的项目信息，都不落日志。

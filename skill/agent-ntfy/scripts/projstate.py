@@ -1,4 +1,4 @@
-"""项目级状态文件：`<项目根>/.agent-ntfy/state.json`。
+"""项目级状态文件：`<项目根>/.ntfy-connector/state.json`。
 
 给 agent 在任何一个会话里读的：本项目远程模式开没开、当前租着哪个槽位、过没过闸。
 它是**状态**不是配置——slot 随租约来去而变；开关由 `away on|off` 改；ask / confirm-sub / release 跑完顺手回写；
@@ -17,7 +17,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-DIR_NAME = ".agent-ntfy"
+DIR_NAME = ".ntfy-connector"
 FILE_NAME = "state.json"
 FIELDS = ("away", "slot", "confirmed", "target", "updated")
 

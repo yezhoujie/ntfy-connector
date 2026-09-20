@@ -121,7 +121,7 @@ alias agent-ntfy='python3 "<skills/agent-ntfy 的路径>/scripts/ntfy_connector.
 **第 1 步——起 daemon。** 它必须比 agent 活得久，所以自己单独跑：
 
 ```bash
-agent-ntfy daemon --detach        # 任何平台：daemon：已在后台启动，pid 12345（日志 ~/.agent-ntfy/daemon.log）
+agent-ntfy daemon --detach        # 任何平台：daemon：已在后台启动，pid 12345（日志 ~/.ntfy-connector/daemon.log）
 agent-ntfy daemon                 # 在 herdr 里：改在一个空闲窗格里前台跑，看得见
 agent-ntfy daemon --status        # daemon：pid 12345  订阅：已连上  等待中的提问：0  确认中：0  槽位：5  传输：unix
 ```
@@ -132,8 +132,8 @@ agent-ntfy daemon --status        # daemon：pid 12345  订阅：已连上  等�
 
 ```
 $ agent-ntfy confirm-sub slot1
-slot1 的 topic：agent-ntfy-xxxxxxxxxxxxxxxxxxxx
-订阅地址：https://ntfy.sh/agent-ntfy-xxxxxxxxxxxxxxxxxxxx
+slot1 的 topic：ntfy-connector-xxxxxxxxxxxxxxxxxxxx
+订阅地址：https://ntfy.sh/ntfy-connector-xxxxxxxxxxxxxxxxxxxx
 在手机 ntfy app 里订阅上面这个 topic；订阅好后按回车，我会发一条带按钮的测试通知——看到它弹出来、点按钮，确认就完成了。
 ⚠️ 按回车、点按钮之前别关这个窗格 / 终端：关了确认就取消，要重来。
 订阅好了就按回车…
@@ -202,10 +202,10 @@ JSON
 ## 7. 安全须知
 
 - **topic 名就是密码。** 知道它的人能看到每一条提问、每一条回复，装了 herdr 的话还能直接往你的 agent 里打指令。设计上没有第二道锁（通路不过滤内容）。别截图、别发聊天、别进 git。
-- topic 是前缀后接 20 位随机小写字母与数字（约 2^103 种可能）。池子存在哪取决于平台（§9 `NTFY_CONNECTOR_STORE`）：**macOS 钥匙串**（按 app 授权）；**Windows** 上是 DPAPI 加密的文件 `~/.agent-ntfy/topics.dpapi`（只有同一台机器上的同一个 Windows 用户能解开）；其余平台是一个明文 `0600` 文件 `~/.agent-ntfy/topics.json`。后两种同一用户账户下的其他进程都能读——比钥匙串宽的边界；要么接受，要么自建 ntfy。租约文件（`~/.agent-ntfy/leases.json`：槽位号、持有者身份、时间戳、窗格 id）、项目级状态文件与 daemon 日志里从不出现 topic 名与消息正文。
+- topic 是前缀后接 20 位随机小写字母与数字（约 2^103 种可能）。池子存在哪取决于平台（§9 `NTFY_CONNECTOR_STORE`）：**macOS 钥匙串**（按 app 授权）；**Windows** 上是 DPAPI 加密的文件 `~/.ntfy-connector/topics.dpapi`（只有同一台机器上的同一个 Windows 用户能解开）；其余平台是一个明文 `0600` 文件 `~/.ntfy-connector/topics.json`。后两种同一用户账户下的其他进程都能读——比钥匙串宽的边界；要么接受，要么自建 ntfy。租约文件（`~/.ntfy-connector/leases.json`：槽位号、持有者身份、时间戳、窗格 id）、项目级状态文件与 daemon 日志里从不出现 topic 名与消息正文。
 - **内容明文经过 ntfy.sh。** 提问会描述你的项目；别往里放密钥。
-- 要轮换全部 topic：macOS 上删掉钥匙串条目（账户 `agent-ntfy`、服务 `NTFY_CONNECTOR_TOPICS`，如 `security delete-generic-password -a agent-ntfy -s NTFY_CONNECTOR_TOPICS`）；其他平台删掉 `topics.json` / `topics.dpapi`。然后重启 daemon：会生成新池子、作废旧租约、每个槽位都要重新确认。
-- **别手建钥匙串条目。** 程序按账户 `agent-ntfy` *加* 服务 `NTFY_CONNECTOR_TOPICS` 查找；账户名不同的条目它看不见，会静默另建一个池子，而你以为自己建的那条在用。
+- 要轮换全部 topic：macOS 上删掉钥匙串条目（账户 `ntfy-connector`、服务 `NTFY_CONNECTOR_TOPICS`，如 `security delete-generic-password -a ntfy-connector -s NTFY_CONNECTOR_TOPICS`）；其他平台删掉 `topics.json` / `topics.dpapi`。然后重启 daemon：会生成新池子、作废旧租约、每个槽位都要重新确认。
+- **别手建钥匙串条目。** 程序按账户 `ntfy-connector` *加* 服务 `NTFY_CONNECTOR_TOPICS` 查找；账户名不同的条目它看不见，会静默另建一个池子，而你以为自己建的那条在用。
 
 ## 8. 已知边界
 
@@ -229,14 +229,14 @@ JSON
 
 | 变量 | 默认 | 作用 |
 |---|---|---|
-| `NTFY_CONNECTOR_HOME` | `~/.agent-ntfy` | 状态目录（目录 0700、文件 0600，在有这些权限位的平台上）：`daemon.sock` 或 `daemon.port`（见 `NTFY_CONNECTOR_IPC`）、`daemon.pid`、`daemon.log`、`leases.json`，以及用到时的 topic 池文件（`topics.json` / `topics.dpapi`，见 `NTFY_CONNECTOR_STORE`）。用 unix socket 传输时路径别太深：socket 路径有一个随系统而异的长度上限，太深 daemon 拒绝启动并提示「无法监听 IPC：…。unix socket 路径有长度上限（系统上限），换一个短一点的 NTFY_CONNECTOR_HOME」 |
+| `NTFY_CONNECTOR_HOME` | `~/.ntfy-connector` | 状态目录（目录 0700、文件 0600，在有这些权限位的平台上）：`daemon.sock` 或 `daemon.port`（见 `NTFY_CONNECTOR_IPC`）、`daemon.pid`、`daemon.log`、`leases.json`，以及用到时的 topic 池文件（`topics.json` / `topics.dpapi`，见 `NTFY_CONNECTOR_STORE`）。用 unix socket 传输时路径别太深：socket 路径有一个随系统而异的长度上限，太深 daemon 拒绝启动并提示「无法监听 IPC：…。unix socket 路径有长度上限（系统上限），换一个短一点的 NTFY_CONNECTOR_HOME」 |
 | `NTFY_CONNECTOR_LANG` | （系统 locale，否则 `en`） | 一切固定文案的语言（卡片标签、按钮、回执、CLI 输出、`--help`）：`zh` 或 `en`。解析顺序：命令行 `--lang zh\|en`（顶层选项，放在子命令前）> 本变量 > 系统 locale（`LC_ALL` / `LC_MESSAGES` / `LANG` 以 `zh` 开头，或 Windows 的中文区域 ⇒ `zh`）> `en`。别的值直接报错，不静默回退（给了 `--lang` 时以它为准、忽略本变量）。agent 可以用 JSON 里的 `lang` 字段按条覆盖。CLI 自己开 herdr 窗格（`away on` 起 daemon、`confirm-sub` 替你开确认窗格）或 detach 起 daemon 时，会把解析出的语言用 `--lang` 带过去，窗格自己的 shell 不决定文案；只有你手工在窗格里起的 daemon / 命令才继承那个窗格的环境 |
 | `NTFY_CONNECTOR_TARGET` | `proj:<项目根>` | 租槽位的身份（`slots` 里显示的租约持有者就是它）。想让几个项目共用一个槽位、或把某个项目单独隔开就设它；同一个值永远复用同一个槽位 |
 | `NTFY_CONNECTOR_URL` | `https://ntfy.sh` | 换一个 ntfy 实例，如自建 |
 | `NTFY_CONNECTOR_IPC` | macOS / Linux 上 `unix`，Windows 上 `tcp` | CLI 与 daemon 之间的传输。`unix`：unix socket `daemon.sock`，靠文件权限保护。`tcp`：回环 TCP 端口；`daemon.port` 两行——端口与一个随机口令——每个请求的首行都带这个口令（否则本机任何进程都能连上）。残留的端点文件按残骸处理，除非对它发起连接真的连上了（「端口连得上 ⇒ 已有实例在跑」）；要是碰巧被无关进程占住了那个端口，删掉 `daemon.port` 再起 daemon。Windows 上不接受 `unix`；其他值直接报错 |
 | `NTFY_CONNECTOR_STORE` | macOS 上 `keychain`，Windows 上 `dpapi`，其余 `file` | topic 池存哪：`keychain`（macOS 的 `security` 命令；其他平台报「找不到 security 命令（钥匙串只在 macOS 上有）；别的平台设 NTFY_CONNECTOR_STORE=file（Linux）或 dpapi（Windows）」）、`file`（`topics.json`，权限 0600）、`dpapi`（`topics.dpapi`，仅 Windows——其他平台报「DPAPI 只在 Windows 上可用（当前平台 …）；别的平台用 NTFY_CONNECTOR_STORE=file 或 keychain」）。池文件解不开（换了用户 / 机器）或内容不是字符串数组时，报错带文件路径；把它移走后重启就是新池子（手机要重新订阅）。三种各挡住什么见 §7 |
 | `NTFY_CONNECTOR_KEYCHAIN` | `NTFY_CONNECTOR_TOPICS` | 存 topic 池的钥匙串服务名（macOS、`keychain` 存储时才用） |
-| `NTFY_CONNECTOR_TOPIC_PREFIX` | `agent-ntfy` | 新生成 topic 名的前缀（`<前缀>-<20 位随机串>`）；字母、数字、`-`、`_`，最长 40 |
+| `NTFY_CONNECTOR_TOPIC_PREFIX` | `ntfy-connector` | 新生成 topic 名的前缀（`<前缀>-<20 位随机串>`）；字母、数字、`-`、`_`，最长 40 |
 | `HERDR_ENV`、`HERDR_PANE_ID` | herdr 设置 | 自动检测，不用你配：在 herdr 里，`ask`、`notify`、`slots`、`release`（不带参数）、`away on`、`away status` 会把当前窗格记到项目的租约上，手机消息就注入到它（`confirm-sub`、`release <slot>`、`add-slot`、`daemon`、`away off` 不碰它） |
 
 命令行的 `--home <目录>`（放在子命令前面）覆盖 `NTFY_CONNECTOR_HOME`。
@@ -251,7 +251,7 @@ agent-ntfy away off       # 我回来了
 agent-ntfy away status    # 人读；加 --json 打印原文
 ```
 
-`away on` 是一站式的：没有 daemon 应答就起一个（在 herdr 里开新窗格起，否则用 `--detach`）；当场给本项目租一个槽位——已经租着的就沿用，否则优先空闲的已过闸槽位，再没有就租编号最小的未过闸空闲槽位并接着走确认（在 herdr 里开一个确认窗格、告诉 agent 该让你看哪个窗格，确认结束时窗格会把结果送回 agent 的会话；不在 herdr 里就退 4 并写明要跑的 `confirm-sub` 命令）；这些都成了才在 `<项目根>/.agent-ntfy/` 建目录（项目根 = git 仓根，不在仓里就是当前目录），目录自带 `.gitignore`（内容 `*`，git 看不到它，你仓里的 `.gitignore` 不动），内有 `state.json`：
+`away on` 是一站式的：没有 daemon 应答就起一个（在 herdr 里开新窗格起，否则用 `--detach`）；当场给本项目租一个槽位——已经租着的就沿用，否则优先空闲的已过闸槽位，再没有就租编号最小的未过闸空闲槽位并接着走确认（在 herdr 里开一个确认窗格、告诉 agent 该让你看哪个窗格，确认结束时窗格会把结果送回 agent 的会话；不在 herdr 里就退 4 并写明要跑的 `confirm-sub` 命令）；这些都成了才在 `<项目根>/.ntfy-connector/` 建目录（项目根 = git 仓根，不在仓里就是当前目录），目录自带 `.gitignore`（内容 `*`，git 看不到它，你仓里的 `.gitignore` 不动），内有 `state.json`：
 
 ```json
 {"away": true, "slot": "slot2", "confirmed": true, "target": "proj:/path/to/project", "updated": "2026-09-13T21:04:11+08:00"}
@@ -259,7 +259,7 @@ agent-ntfy away status    # 人读；加 --json 打印原文
 
 `slot` / `confirmed` / `target` 由 `ask`、`notify`、`confirm-sub`、`release`、`away` 顺手刷新——但**只在目录已存在的项目里**，没启用过远程模式的项目不会被建目录。`away status` 会向 daemon 要租约、两边不一致时按 daemon 改写文件（并打印「已按 daemon 的租约校正状态文件」）；daemon 没跑就照旧读文件并注明未校对。topic 名永远不写进去。`away` 为 `true` 期间 `ask` / `notify` 只用已过闸的槽位——没有人在键盘旁替新槽位过闸。
 
-`away status --json`（给 agent 读的那个形态）要在 agent 所在的 herdr 窗格里、或它起的子进程里跑：它和 `ask` / `notify` / `slots` 一样会把当前窗格记到租约上，从别处跑会把手机消息指到错的窗格。一条典型的规则是：*`.agent-ntfy/state.json` 里 `away: true` ⇒ 一切要我拍板的事用 `agent-ntfy ask`；后台跑（前台工具调用几分钟就会被杀、卡片作废）；做完 `away off`（它会释放槽位）。*
+`away status --json`（给 agent 读的那个形态）要在 agent 所在的 herdr 窗格里、或它起的子进程里跑：它和 `ask` / `notify` / `slots` 一样会把当前窗格记到租约上，从别处跑会把手机消息指到错的窗格。一条典型的规则是：*`.ntfy-connector/state.json` 里 `away: true` ⇒ 一切要我拍板的事用 `agent-ntfy ask`；后台跑（前台工具调用几分钟就会被杀、卡片作废）；做完 `away off`（它会释放槽位）。*
 
 ## 10. 已知行为
 
@@ -301,7 +301,7 @@ positional arguments:
 options:
   -h, --help            show this help message and exit
   --lang {zh,en}        文案语言（zh / en；不给则按 NTFY_CONNECTOR_LANG，再按系统 locale，再缺省 en）
-  --home HOME           状态目录（默认 ~/.agent-ntfy）
+  --home HOME           状态目录（默认 ~/.ntfy-connector）
 
 usage: agent-ntfy ask [-h] [--timeout TIMEOUT]
 
@@ -371,7 +371,7 @@ npx skills add 'yezhoujie/agent-remote-communication-skills#agent-ntfy/v0.1.3' -
 
 **给一台已经跑着 daemon 的机器升级**——按这个顺序：
 
-1. **用你现在手上的 CLI** 停掉正在跑的 daemon：`agent-ntfy daemon --stop`。文件已经换成新版的话，改用 `kill -TERM <pid>`（pid 在 `~/.agent-ntfy/daemon.pid` 里）。原因：从 0.1.0 起 `--stop` 是经 socket 向 daemon 发命令；旧版 daemon 不认这条命令，新版 CLI 会报「没有确认停止」并退 1。
+1. **用你现在手上的 CLI** 停掉正在跑的 daemon：`agent-ntfy daemon --stop`。文件已经换成新版的话，改用 `kill -TERM <pid>`（pid 在 `~/.ntfy-connector/daemon.pid` 里）。原因：从 0.1.0 起 `--stop` 是经 socket 向 daemon 发命令；旧版 daemon 不认这条命令，新版 CLI 会报「没有确认停止」并退 1。
 2. 换文件：`npx skills update`（或再跑一遍安装命令、或拷目录）。
 3. 起新 daemon：`agent-ntfy daemon --detach`，然后 `agent-ntfy daemon --status` 的行尾应有「传输：unix」（Windows 上是 `tcp`）。不管怎样都必须重启：旧版 daemon 会忽略新版 CLI 发的字段。
 4. 跑 `agent-ntfy slots`。0.1.0 之前租下的槽位，持有者显示的是 `wG:p1` 这样的窗格 id 而不是 `proj:<路径>`；用 `NTFY_CONNECTOR_TARGET=<那个持有者> agent-ntfy release <slot>` 释放它们（`release <slot>` 只释放本项目自己的租约；不带参数的 `release` 只找得到当前项目的租约）。
@@ -385,7 +385,7 @@ skill 只提供三条命令——`ask`、`notify`、`away`——**有意不规�
 agent 只在碰巧想起这个 skill 时才用它，你离席时靠不住。触发策略要写进 agent 的**常驻指令**（它每个会话都会
 加载的那份文件），而且要覆盖四个时刻：
 
-1. **会话开始 / 上下文被清空后**：读 `<项目根>/.agent-ntfy/state.json`（`away status --json`）；`away: true`
+1. **会话开始 / 上下文被清空后**：读 `<项目根>/.ntfy-connector/state.json`（`away status --json`）；`away: true`
    就表示人不在、从现在起每个决定都走手机。
 2. **人要走了**（「我走了，有事发手机」）：趁他还在键盘旁跑 `away on`，把输出原样转告——手机上那两下
    （订阅、点按钮）没人能代做。

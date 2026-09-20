@@ -11,7 +11,7 @@ CLAUDE.md
 task/
 
 # agent-ntfy 远程交互模式的项目级运行时状态
-.agent-ntfy/
+.ntfy-connector/
 
 # 编辑器本地配置
 .vscode/

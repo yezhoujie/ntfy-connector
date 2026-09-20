@@ -226,7 +226,7 @@ to the user**; the outcomes are:
   releases its slot), or `add-slot` and run `away on` again. **Never release another project's slot** —
   `release <slot>` refuses it (rc 4); a lease is that project's until its own `away off` / `release`.
 
-The switch and the current slot live in `<project root>/.agent-ntfy/state.json` (project root = the git
+The switch and the current slot live in `<project root>/.ntfy-connector/state.json` (project root = the git
 toplevel, else the cwd), written by `away on|off` and refreshed by `ask` / `notify` / `confirm-sub` /
 `release`. Read it with `away status --json`:
 

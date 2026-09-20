@@ -1,4 +1,4 @@
-"""状态层：topic 池（密钥存储）+ 槽位租约（~/.agent-ntfy/leases.json）。
+"""状态层：topic 池（密钥存储）+ 槽位租约（~/.ntfy-connector/leases.json）。
 
 两层分开存：
     密钥层  topic 名的池子（JSON 数组），存密钥存储（macOS 钥匙串 / 0600 文件 / Windows DPAPI 密文），几乎不变
@@ -41,9 +41,9 @@ from pathlib import Path
 import texts
 
 KEYCHAIN_SERVICE = os.environ.get("NTFY_CONNECTOR_KEYCHAIN", "NTFY_CONNECTOR_TOPICS")
-KEYCHAIN_ACCOUNT = "agent-ntfy"  # 钥匙串条目的 -a，只是标识，不参与任何逻辑
-DEFAULT_PREFIX = os.environ.get("NTFY_CONNECTOR_TOPIC_PREFIX", "agent-ntfy")
-HOME_DIR = Path(os.environ.get("NTFY_CONNECTOR_HOME", "~/.agent-ntfy")).expanduser()
+KEYCHAIN_ACCOUNT = "ntfy-connector"  # 钥匙串条目的 -a，只是标识，不参与任何逻辑
+DEFAULT_PREFIX = os.environ.get("NTFY_CONNECTOR_TOPIC_PREFIX", "ntfy-connector")
+HOME_DIR = Path(os.environ.get("NTFY_CONNECTOR_HOME", "~/.ntfy-connector")).expanduser()
 LEASES_PATH = HOME_DIR / "leases.json"
 DEFAULT_POOL_SIZE = 5
 # 小写字母 + 数字，20 位 ≈ 2^103 的熵；不用大写，免得用户在手机上抄 topic 名时分不清大小写
