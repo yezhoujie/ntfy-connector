@@ -30,7 +30,16 @@ def _mismatched(src_files: dict[str, Path], dest_files: dict[str, Path]) -> list
     return result
 
 
+def _utf8_stdio() -> None:
+    """标准流切到 UTF-8：Windows 控制台与 CI 的缺省代码页（如 cp1252）编不了中文，会让一条摘要变成异常。"""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="replace")
+
+
 def main(argv: list[str]) -> int:
+    _utf8_stdio()
     if argv not in ([], ["--check"]):
         print(f"用法：python3 {sys.argv[0]} [--check]", file=sys.stderr)
         return 2
