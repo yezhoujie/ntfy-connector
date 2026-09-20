@@ -1,16 +1,18 @@
-# agent-ntfy
+# ntfy-connector
 
 English · [中文](README.zh-CN.md)
 
-[![skills.sh](https://skills.sh/b/yezhoujie/agent-remote-communication-skills)](https://skills.sh/yezhoujie/agent-remote-communication-skills)
+[![skills.sh](https://skills.sh/b/yezhoujie/ntfy-connector)](https://skills.sh/yezhoujie/ntfy-connector)
+[![test](https://github.com/yezhoujie/ntfy-connector/actions/workflows/test.yml/badge.svg)](https://github.com/yezhoujie/ntfy-connector/actions/workflows/test.yml)
 
-Let any AI coding CLI push the decisions it cannot make on its own to your phone through
-[ntfy](https://ntfy.sh), and send your verdict — or any instruction — straight back into the agent's session.
-It can also push one-way notifications to the same phone. No server, no fixed IP, no paid service, no
-dependencies beyond Python 3.
+ntfy-connector is a daemon + CLI that pushes decisions needing a human call to your phone through
+[ntfy](https://ntfy.sh), and brings the verdict — or any instruction — straight back. It can also push
+one-way notifications to the same phone. `agent-ntfy` is the skill (adapter) that lets AI coding CLIs
+drive it, published from this same repository.
+No server, no fixed IP, no paid service, no dependencies beyond Python 3.
 
-This file is for the person installing it. The agent reads [SKILL.md](SKILL.md) and `references/`;
-you never need to explain the tool to it.
+This file is for the person installing it. The agent reads [SKILL.md](skill/agent-ntfy/SKILL.md) and
+[`references/`](skill/agent-ntfy/references/); you never need to explain the tool to it.
 
 ## Contents
 
@@ -27,13 +29,15 @@ you never need to explain the tool to it.
 10. Known behaviours
 11. CLI reference
 12. Versions and upgrading
+12.1 Upgrading from agent-ntfy 0.1.x
 13. Integration: keeping the skill in force for the whole session
+14. Repository layout & development
 
 ## 1. How it works
 
 ```
-agent ──ask (JSON on stdin)──▶ agent-ntfy ──local socket──▶ daemon ──HTTPS──▶ ntfy.sh ──▶ your phone
-      ◀── reply on stdout ────            ◀────────────────        ◀── SSE ────         ◀── tap / type
+agent ──ask (JSON on stdin)──▶ ntfy-connector ──local socket──▶ daemon ──HTTPS──▶ ntfy.sh ──▶ your phone
+      ◀── reply on stdout ────                ◀────────────────        ◀── SSE ────         ◀── tap / type
                                                                       │
                                                           no question pending?
                                                                       ▼
@@ -99,20 +103,23 @@ Android users keep the regular ntfy app; it has the reply box.
 Into the current project (by default the skill lands in `./.agents/skills/agent-ntfy`, with a symlink from `./.claude/skills/agent-ntfy`; with a single non-universal agent selected via `-a <agent>` the CLI copies it into that agent's directory instead):
 
 ```bash
-npx skills add yezhoujie/agent-remote-communication-skills --skill agent-ntfy
+npx skills add yezhoujie/ntfy-connector
 ```
 
-For all projects at once, add `-g`: the files go to `~/.agents/skills/agent-ntfy` and `~/.claude/skills/agent-ntfy` becomes a symlink to them.
+`--skill agent-ntfy` is accepted too but not required — this repository ships that one skill. For all
+projects at once, add `-g`: the files go to `~/.agents/skills/agent-ntfy` and `~/.claude/skills/agent-ntfy` becomes a symlink to them.
 
 > **Warning about `-g`.** If `~/.claude/skills/agent-ntfy` already exists as a real directory (a copy you put there by hand), the `skills` CLI deletes it and replaces it with the symlink. Back it up first. (Read from the CLI's source; not something to try on a directory you care about.)
 
-Any other way of putting `skills/agent-ntfy/` where your agent loads skills works just as well (`git clone` and copy the folder). To pin a version, install with a git ref: `npx skills add 'yezhoujie/agent-remote-communication-skills#agent-ntfy/v0.1.3' --skill agent-ntfy` (§12).
+Any other way of putting `skill/agent-ntfy/` where your agent loads skills works just as well (`git clone` and copy the folder). To pin a version, install with a git ref: `npx skills add 'yezhoujie/ntfy-connector#v0.2.0'` (§12).
 
-The CLI is `scripts/ntfy_connector.py` inside that directory. Its own messages call it `agent-ntfy`; an alias
+Claude Code users can install it as a plugin instead: `claude plugin marketplace add yezhoujie/agent-remote-communication-skills` once, then `claude plugin install agent-ntfy@agent-remote-communication-skills`. That marketplace is maintained in the index repository ([`agent-remote-communication-skills`](https://github.com/yezhoujie/agent-remote-communication-skills)); its content for this skill comes from this repository.
+
+The CLI is `scripts/ntfy_connector.py` inside that directory. Its own messages call it `ntfy-connector`; an alias
 makes the commands below shorter:
 
 ```bash
-alias agent-ntfy='python3 "<path to skills/agent-ntfy>/scripts/ntfy_connector.py"'
+alias ntfy-connector='python3 "<skill dir>/scripts/ntfy_connector.py"'
 ```
 
 ## 4. Your two manual steps
@@ -127,38 +134,38 @@ Everything else is automatic: the topic pool is created on first use, the daemon
 **Step 1 — start the daemon.** It must outlive the agent, so it runs on its own:
 
 ```bash
-agent-ntfy daemon --detach        # any platform:  daemon: started in the background, pid 12345 (log ~/.ntfy-connector/daemon.log)
-agent-ntfy daemon                 # inside herdr: run it in a spare pane instead, so it stays visible
-agent-ntfy daemon --status        # daemon: pid 12345  subscription: connected  pending questions: 0  confirming: 0  slots: 5  transport: unix
+ntfy-connector daemon --detach        # any platform:  daemon: started in the background, pid 12345 (log ~/.ntfy-connector/daemon.log)
+ntfy-connector daemon                 # inside herdr: run it in a spare pane instead, so it stays visible
+ntfy-connector daemon --status        # daemon: pid 12345  subscription: connected  pending questions: 0  confirming: 0  slots: 5  transport: unix
 ```
 
-Paths are shown with `~` here; the CLI prints them expanded. If `--detach` reports `daemon (pid 12345) not ready within 5 s, still starting; check later with agent-ntfy daemon --status, log …`, look at the log — one possible cause on macOS is a keychain dialog on screen on first run (the pool is read through the `security` command): answer it, then check `--status`. Want Chinese wording? Pass `--lang zh` (or set `NTFY_CONNECTOR_LANG=zh`, or just have a Chinese shell locale): the daemon keeps the language it was started with (when `away on` starts it for you, it passes the caller's language along). Never start the daemon as a background job of the agent's own shell: it would die with the agent. You do not have to do this step by hand: `away on` (§9.1) starts the daemon when none answers.
+Paths are shown with `~` here; the CLI prints them expanded. If `--detach` reports `daemon (pid 12345) not ready within 5 s, still starting; check later with ntfy-connector daemon --status, log …`, look at the log — one possible cause on macOS is a keychain dialog on screen on first run (the pool is read through the `security` command): answer it, then check `--status`. Want Chinese wording? Pass `--lang zh` (or set `NTFY_CONNECTOR_LANG=zh`, or just have a Chinese shell locale): the daemon keeps the language it was started with (when `away on` starts it for you, it passes the caller's language along). Never start the daemon as a background job of the agent's own shell: it would die with the agent. You do not have to do this step by hand: `away on` (§9.1) starts the daemon when none answers.
 
 **Step 2 — confirm that your phone gets notifications for slot 1.** Run this in your own terminal (not through the agent: it prints the topic name, which is the password):
 
 ```
-$ agent-ntfy confirm-sub slot1
+$ ntfy-connector confirm-sub slot1
 topic for slot1: ntfy-connector-xxxxxxxxxxxxxxxxxxxx
 subscribe URL: https://ntfy.sh/ntfy-connector-xxxxxxxxxxxxxxxxxxxx
 Subscribe to the topic above in the ntfy app on your phone. Once subscribed, press Enter and I'll send a test notification with a button — when it pops up, tap the button and the check is done.
 ⚠️ Don't close this pane / terminal before pressing Enter and tapping the button: closing it cancels the check and you start over.
 Press Enter once subscribed…
-agent-ntfy: test notification sent — tap “Got it” in the phone's notification shade (within 600 s)…
+ntfy-connector: test notification sent — tap “Got it” in the phone's notification shade (within 600 s)…
 ✅ slot1 confirmed: the phone gets notifications; the agent can use it for questions from now on
 You can close this terminal window now. Back in your agent's session, send it this line:
-  agent-ntfy: slot1 is confirmed; you can use it for questions now
+  ntfy-connector: slot1 is confirmed; you can use it for questions now
 ```
 
-Only the tap counts, and it must be the notification that popped up — tapping inside the app proves nothing about notifications (see §6). If nothing pops up within 10 minutes the command exits 2; fix the phone and run it again. After `✅ … confirmed` the command prints `You can close this terminal window now. Back in your agent's session, send it this line: agent-ntfy: slot1 is confirmed; you can use it for questions now` — paste that line to the agent; it has no other way to learn the result when you ran the check yourself. When the agent itself runs `confirm-sub` inside herdr, it opens a new pane for you with exactly this dialogue and tells you which pane to look at; the topic name never enters the agent's output. Do not close that pane until you have pressed Enter and tapped the button — closing it cancels the check. When the check ends the pane sends the result back to the agent by itself (a line starting with `[ntfy-connector] ` appears in the agent's session), so you have nothing to relay; after `✅ … confirmed` it asks `Close this pane? [Y/n]`: Enter closes it, `n` keeps it.
+Only the tap counts, and it must be the notification that popped up — tapping inside the app proves nothing about notifications (see §6). If nothing pops up within 10 minutes the command exits 2; fix the phone and run it again. After `✅ … confirmed` the command prints `You can close this terminal window now. Back in your agent's session, send it this line: ntfy-connector: slot1 is confirmed; you can use it for questions now` — paste that line to the agent; it has no other way to learn the result when you ran the check yourself. When the agent itself runs `confirm-sub` inside herdr, it opens a new pane for you with exactly this dialogue and tells you which pane to look at; the topic name never enters the agent's output. Do not close that pane until you have pressed Enter and tapped the button — closing it cancels the check. When the check ends the pane sends the result back to the agent by itself (a line starting with `[ntfy-connector] ` appears in the agent's session), so you have nothing to relay; after `✅ … confirmed` it asks `Close this pane? [Y/n]`: Enter closes it, `n` keeps it.
 
 **Step 3 — ask yourself a question**, to see the round trip:
 
 ```bash
-agent-ntfy ask <<'JSON'
+ntfy-connector ask <<'JSON'
 {
   "title":       "Test: which dessert",
-  "doing":       "Checking that agent-ntfy reaches this phone",
-  "description": "This is the first question sent through agent-ntfy from this machine. Nothing depends on the answer.",
+  "doing":       "Checking that ntfy-connector reaches this phone",
+  "description": "This is the first question sent through ntfy-connector from this machine. Nothing depends on the answer.",
   "blocker":     "No blocker; this is a test.",
   "options": [
     {"id": "cake", "label": "Cake", "consequence": "The test passes and you had to think about cake"},
@@ -174,21 +181,21 @@ JSON
 
 The phone shows the card: title `[<project dir>] Test: which dessert`, then bold section labels (`[Doing]`, `[Background]`, `[Blocker]`, `[Options]`, `[My recommendation]`, `[Your call]`), a rule, the closing hint and one button. The options are numbered `1\. Cake (recommended) → …` / `2\. Pie → …` in the Markdown source and separated by blank lines — an escaped period, which CommonMark renders as a plain `1.`, because the ntfy Android app turns a real ordered list into bullets and the numbers disappear (a client that does not render Markdown shows the backslash). Tap **Accept recommended** and the terminal prints `Cake`; type `pie, obviously` in the app's reply box instead and it prints `pie, obviously`. The card on the phone turns into `✅ Answered · …` with your reply on top and the question kept below it.
 
-Leases belong to the project (§1). If you ran this test inside the directory your agent will work in, the agent simply reuses slot1 — nothing to do. If you ran it elsewhere, run `agent-ntfy release` there (no argument releases the slot leased by the current project); otherwise the agent would be handed slot2 — unconfirmed — and send you back to step 2 for it.
+Leases belong to the project (§1). If you ran this test inside the directory your agent will work in, the agent simply reuses slot1 — nothing to do. If you ran it elsewhere, run `ntfy-connector release` there (no argument releases the slot leased by the current project); otherwise the agent would be handed slot2 — unconfirmed — and send you back to step 2 for it.
 
 **Step 4 — hand it to the agent.** It reads SKILL.md on its own. When it hits a slot that is not confirmed yet, it exits with code 4 and asks you to run `confirm-sub slotN` (step 2) — inside herdr it opens that pane for you instead. That is the design, not a bug: the topic name must not pass through the agent's output.
 
 **Notifications.** The agent can also send a one-way card that needs no answer:
 
 ```bash
-agent-ntfy notify <<'JSON'
+ntfy-connector notify <<'JSON'
 {"title": "Build finished", "body": "**Tests**: 483 passed.\n\nNothing to decide; just so you know.", "lang": "en"}
 JSON
 ```
 
 It prints `notification sent on slot1 (if the user replies, it arrives as an instruction)` and returns at once: no button, no waiting, exit codes 0 sent · 1 invalid input · 3 channel failure · 4 a human must act. It is allowed while a question is pending. The ntfy app has **one reply box per topic**, not per card: whatever you send while a question is pending is that question's reply; when nothing is pending it is injected into the agent's session (§2). Notifications count against the same ntfy.sh quota as questions (§8), so the agent is told not to chatter.
 
-**Housekeeping.** Slots are leased until released (`agent-ntfy slots` to see who holds what — the project path, since when, and the pane — and `agent-ntfy release <slot>` to free one). Once all five are taken the agent shows you who holds what and you decide: turn remote mode off in one of those projects yourself, or let it `add-slot`. It never releases another project's slot; that is normal steady state.
+**Housekeeping.** Slots are leased until released (`ntfy-connector slots` to see who holds what — the project path, since when, and the pane — and `ntfy-connector release <slot>` to free one). Once all five are taken the agent shows you who holds what and you decide: turn remote mode off in one of those projects yourself, or let it `add-slot`. It never releases another project's slot; that is normal steady state.
 
 ## 6. If nothing pops up on the phone (Android / MIUI checklist)
 
@@ -206,7 +213,7 @@ Go through every line, they are independent:
 - **Autostart** allowed for ntfy
 - **Lock-screen notifications** allowed for ntfy
 - In the ntfy app, the topic is **not muted** and the app's own notification setting is on
-- After changing anything, run `agent-ntfy confirm-sub slotN --again` and wait for the pop-up before tapping
+- After changing anything, run `ntfy-connector confirm-sub slotN --again` and wait for the pop-up before tapping
 
 Other Android ROMs have the same switches under different names; only MIUI has been tested.
 
@@ -258,9 +265,9 @@ The skill does not decide *when* the agent should ask on the phone; that is your
 your agent's configuration). What the skill gives that policy is a switch and a place to read it:
 
 ```
-agent-ntfy away on        # you are leaving: decisions should go to the phone
-agent-ntfy away off       # you are back
-agent-ntfy away status    # in words; add --json for the raw file
+ntfy-connector away on        # you are leaving: decisions should go to the phone
+ntfy-connector away off       # you are back
+ntfy-connector away status    # in words; add --json for the raw file
 ```
 
 `away on` is a one-stop command. It starts the daemon if none answers (inside herdr in a new pane, otherwise with `--detach`), leases a slot for the project on the spot — the one it already holds, else a confirmed idle slot, else the lowest unconfirmed idle slot, which it then sends through the reachability check (inside herdr it opens a confirmation pane, tells the agent which pane you should look at, and the pane sends the result back into the agent's session when the check ends; outside herdr it exits 4 and names the `confirm-sub` command to run) — and only then creates `<project root>/.ntfy-connector/` (project root = the git toplevel, else the current directory) with a self-ignoring `.gitignore` and a `state.json`:
@@ -278,7 +285,7 @@ prints `state file corrected from the daemon's leases`); with no daemon it print
 Run `away status --json` (the form meant for the agent) from the agent's herdr pane or a process started
 from it: like `ask` / `notify` / `slots` it records the current pane on the lease, and run from elsewhere it would point
 phone messages at the wrong pane. A typical rule reads: *if `.ntfy-connector/state.json` says `away: true`, use
-`agent-ntfy ask` for anything that needs my decision; run it in the background (a foreground tool call is
+`ntfy-connector ask` for anything that needs my decision; run it in the background (a foreground tool call is
 killed after minutes and the card is cancelled); `away off` when done (it releases the slot).*
 
 ## 10. Known behaviours
@@ -286,7 +293,7 @@ killed after minutes and the card is cancelled); `away off` when done (it releas
 Observed on a real phone; none is a bug.
 
 - **Daemon restarted, old receipt on the phone.** Tapping a button on a receipt sent by the previous daemon process still performs the action, but you get a new short message saying so; the old card is not updated in place. Delete it by hand.
-- **Network outage.** Shorter than about 90 s the daemon does not even notice (the connection resumes). Longer, it reconnects with backoff, and messages you sent meanwhile are replayed once, not duplicated. Once it has been down 60 s or failed to reconnect 3 times, a waiting `ask` prints an `agent-ntfy: note: …` line and keeps waiting.
+- **Network outage.** Shorter than about 90 s the daemon does not even notice (the connection resumes). Longer, it reconnects with backoff, and messages you sent meanwhile are replayed once, not duplicated. Once it has been down 60 s or failed to reconnect 3 times, a waiting `ask` prints an `ntfy-connector: note: …` line and keeps waiting.
 - **Replies starting with `-`** (`-v`, `--help`, `- item`) are injected as-is; nothing is parsed as an option.
 - **Stopping the daemon**: do not send from the phone while it shuts down. Messages consumed in that window get a best-effort receipt (`The daemon is stopping; your message was not delivered. Please resend later.`); if even that fails they are gone (the daemon does not replay history on start).
 - **Cold start does not replay.** Messages sent while no daemon was running are not delivered later; the phone keeps them, the agent never sees them.
@@ -300,8 +307,8 @@ Observed on a real phone; none is a bug.
 Output of `NTFY_CONNECTOR_LANG=en python3 scripts/ntfy_connector.py --help` and `<subcommand> --help` (`slots` and `add-slot` take no options), with the home directory shown as `~`:
 
 ```
-usage: agent-ntfy [-h] [--lang {zh,en}] [--home HOME]
-                  {ask,notify,daemon,slots,release,confirm-sub,add-slot,away} ...
+usage: ntfy-connector [-h] [--lang {zh,en}] [--home HOME]
+                      {ask,notify,daemon,slots,release,confirm-sub,add-slot,away} ...
 
 Push decisions that need a human to your phone via ntfy.sh, and bring the
 verdict back
@@ -320,28 +327,28 @@ positional arguments:
                         it opens a pane for the user)
     add-slot            add a slot
     away                remote-mode switch: on is one-stop (starts the daemon,
-                        makes sure a usable slot exists, then writes .agent-
-                        ntfy/state.json at the project root for the agent to
-                        read; no topic name in it)
+                        makes sure a usable slot exists, then writes .ntfy-
+                        connector/state.json at the project root for the agent
+                        to read; no topic name in it)
 
 options:
   -h, --help            show this help message and exit
-  --lang {zh,en}        wording language (zh / en; default: NTFY_CONNECTOR_LANG,
-                        then the system locale, then en)
+  --lang {zh,en}        wording language (zh / en; default:
+                        NTFY_CONNECTOR_LANG, then the system locale, then en)
   --home HOME           state directory (default ~/.ntfy-connector)
 
-usage: agent-ntfy ask [-h] [--timeout TIMEOUT]
+usage: ntfy-connector ask [-h] [--timeout TIMEOUT]
 
 options:
   -h, --help         show this help message and exit
   --timeout TIMEOUT  seconds to wait for a reply (default 12 hours)
 
-usage: agent-ntfy notify [-h]
+usage: ntfy-connector notify [-h]
 
 options:
   -h, --help  show this help message and exit
 
-usage: agent-ntfy daemon [-h] [--detach | --status | --stop]
+usage: ntfy-connector daemon [-h] [--detach | --status | --stop]
 
 options:
   -h, --help  show this help message and exit
@@ -349,7 +356,7 @@ options:
   --status    show daemon status
   --stop      stop the daemon
 
-usage: agent-ntfy release [-h] [slot]
+usage: ntfy-connector release [-h] [slot]
 
 positional arguments:
   slot        slot to release; omit to release the one leased by the current
@@ -358,10 +365,10 @@ positional arguments:
 options:
   -h, --help  show this help message and exit
 
-usage: agent-ntfy confirm-sub [-h] [--again] [--subscribed] [--show-topic]
-                              [--close-pane] [--report-to PANE]
-                              [--timeout TIMEOUT]
-                              slot
+usage: ntfy-connector confirm-sub [-h] [--again] [--subscribed] [--show-topic]
+                                  [--close-pane] [--report-to PANE]
+                                  [--timeout TIMEOUT]
+                                  slot
 
 positional arguments:
   slot               slot to confirm
@@ -382,7 +389,7 @@ options:
                      pane that opened it)
   --timeout TIMEOUT  seconds to wait for the button tap (default 600)
 
-usage: agent-ntfy away [-h] [--json] {on,off,status}
+usage: ntfy-connector away [-h] [--json] {on,off,status}
 
 positional arguments:
   {on,off,status}  on / off / status
@@ -392,27 +399,86 @@ options:
   --json           with status: print state.json verbatim (for the agent)
 ```
 
-Exit codes of `ask`: 0 reply on stdout · 1 invalid input, nothing sent · 2 timeout · 3 channel failure (daemon not running, connection lost, publish failed; stderr says whether the message went out) · 4 a human must act (unconfirmed slot, all slots leased, target already waiting) · 130 Ctrl-C. `notify`: 0 sent · 1 invalid input · 3 channel failure · 4 a human must act (no 2: it does not wait). `confirm-sub`: 0 confirmed (or the check was started in a herdr pane) · 1 unknown slot · 2 no Enter or no tap within the timeout · 3 channel failure · 4 not a terminal and no herdr pane possible (and no `--subscribed`), stdin ended before Enter, or slot busy · 130 Ctrl-C. The stderr text for each case is in [references/failures.md](references/failures.md).
+Exit codes of `ask`: 0 reply on stdout · 1 invalid input, nothing sent · 2 timeout · 3 channel failure (daemon not running, connection lost, publish failed; stderr says whether the message went out) · 4 a human must act (unconfirmed slot, all slots leased, target already waiting) · 130 Ctrl-C. `notify`: 0 sent · 1 invalid input · 3 channel failure · 4 a human must act (no 2: it does not wait). `confirm-sub`: 0 confirmed (or the check was started in a herdr pane) · 1 unknown slot · 2 no Enter or no tap within the timeout · 3 channel failure · 4 not a terminal and no herdr pane possible (and no `--subscribed`), stdin ended before Enter, or slot busy · 130 Ctrl-C. Every subcommand except `--help` exits 4 on the first run after upgrading from agent-ntfy 0.1.x while the old daemon is still listening (§12.1). The stderr text for each case is in [references/failures.md](skill/agent-ntfy/references/failures.md).
 
 Set `NTFY_CONNECTOR_LANG=zh` to get the same help and messages in Chinese. The daemon log is written in Chinese regardless.
 
 ## 12. Versions and upgrading
 
-Versions are git tags `vX.Y.Z`; what changed is in [CHANGELOG.md](../../CHANGELOG.md). The `skills` CLI and skills.sh do not read a version number — an install is a snapshot of the repository content, and `npx skills update` refreshes it (`-g` for global installs, `-p` for the current project). To stay on a release, install with the tag as git ref; per the `skills` CLI documentation `update` then stays on that ref:
+Versions are git tags `vX.Y.Z`; what changed is in [CHANGELOG.md](CHANGELOG.md). The `skills` CLI and skills.sh do not read a version number — an install is a snapshot of the repository content, and `npx skills update` refreshes it (`-g` for global installs, `-p` for the current project). To stay on a release, install with the tag as git ref; per the `skills` CLI documentation `update` then stays on that ref:
 
 ```bash
-npx skills add 'yezhoujie/agent-remote-communication-skills#agent-ntfy/v0.1.3' --skill agent-ntfy
+npx skills add 'yezhoujie/ntfy-connector#v0.2.0'
 ```
 
 **Upgrading a machine that already runs a daemon** — do the steps in this order:
 
-1. Stop the running daemon **with the CLI you have now**: `agent-ntfy daemon --stop`. If you already replaced the files, send it `kill -TERM <pid>` instead (the pid is in `~/.ntfy-connector/daemon.pid`). Reason: since 0.1.0 `--stop` asks the daemon over its socket; a daemon from an earlier version does not know that command, so the new CLI reports `did not acknowledge the stop` and exits 1.
+1. Stop the running daemon **with the CLI you have now**: `ntfy-connector daemon --stop`. If you already replaced the files, send it `kill -TERM <pid>` instead (the pid is in `~/.ntfy-connector/daemon.pid`). Reason: since 0.1.0 `--stop` asks the daemon over its socket; a daemon from an earlier version does not know that command, so the new CLI reports `did not acknowledge the stop` and exits 1.
 2. Update the files: `npx skills update` (or run the install command again, or copy the directory).
-3. Start the new daemon: `agent-ntfy daemon --detach`, then `agent-ntfy daemon --status` should show `transport: unix` (or `tcp` on Windows). A restart is required in any case: an earlier daemon ignores the fields the new CLI sends.
-4. Run `agent-ntfy slots`. Leases taken before 0.1.0 show a pane id such as `wG:p1` as holder instead of `proj:<path>`; free them with `NTFY_CONNECTOR_TARGET=<that holder> agent-ntfy release <slot>` (`release <slot>` only releases your own project's lease; `release` without argument only finds the current project's lease).
-5. In the herdr pane your agent works in, run `agent-ntfy slots` (or `ask` / `notify` / `away status`) so the project's lease records that pane; phone messages are injected there.
+3. Start the new daemon: `ntfy-connector daemon --detach`, then `ntfy-connector daemon --status` should show `transport: unix` (or `tcp` on Windows). A restart is required in any case: an earlier daemon ignores the fields the new CLI sends.
+4. Run `ntfy-connector slots`. Leases taken before 0.1.0 show a pane id such as `wG:p1` as holder instead of `proj:<path>`; free them with `NTFY_CONNECTOR_TARGET=<that holder> ntfy-connector release <slot>` (`release <slot>` only releases your own project's lease; `release` without argument only finds the current project's lease).
+5. In the herdr pane your agent works in, run `ntfy-connector slots` (or `ask` / `notify` / `away status`) so the project's lease records that pane; phone messages are injected there.
 
-Nothing else migrates: the state directory layout and `state.json` are unchanged, and the defaults (`NTFY_CONNECTOR_IPC`, `NTFY_CONNECTOR_STORE`) reproduce the previous behaviour on macOS.
+Between 0.1.x releases nothing else migrates: the state directory layout and `state.json` are unchanged, and the defaults (`NTFY_CONNECTOR_IPC`, `NTFY_CONNECTOR_STORE`) reproduce the previous behaviour on macOS.
+
+### 12.1 Upgrading from agent-ntfy 0.1.x
+
+The repository and the CLI were renamed. What used to ship as `agent-ntfy` (script `scripts/agent_ntfy.py`,
+released as tags `v0.1.0`–`v0.1.2` and then `agent-ntfy/v0.1.3` inside the shared
+`agent-remote-communication-skills` repository) is this repository's `ntfy-connector`
+(script `scripts/ntfy_connector.py`), starting at `v0.2.0`. The skill that drives it keeps the name
+`agent-ntfy`; topic names and phone subscriptions are unaffected by any of this.
+
+1. Stop the daemon **with the old CLI you have now** (its own alias, or `kill -TERM <pid>`; the pid is in
+   `~/.agent-ntfy/daemon.pid`).
+2. Install the new files at the new address (§3).
+3. Run any `ntfy-connector` subcommand once — anything except `--help`. The first such run migrates
+   automatically and is safe to repeat (later runs are no-ops):
+   - `~/.agent-ntfy` (topic pool, leases, log) is renamed to `~/.ntfy-connector`. This is always that one
+     fixed location, never wherever `--home` / `NTFY_CONNECTOR_HOME` points; if you renamed the variable but
+     kept its value, so `NTFY_CONNECTOR_HOME` now points straight at `~/.agent-ntfy`, treat yourself as
+     already migrated.
+   - macOS only: the topic-pool keychain item (service `AGENT_NTFY_TOPICS`, account `agent-ntfy`) is copied
+     to the new item (service `NTFY_CONNECTOR_TOPICS`, account `ntfy-connector`), then the old one is
+     deleted.
+   - Each project's `<project root>/.agent-ntfy/` is renamed to `.ntfy-connector/` the first time a command
+     resolves that project.
+   - If an old-version daemon is still listening on `~/.agent-ntfy`, nothing above happens (exit 4): stop it
+     (step 1) and rerun.
+   - If both the old and the new location already exist, nothing is touched and a warning names both;
+     confirm the new one holds what you need, then delete the old one yourself.
+   - When `NTFY_CONNECTOR_HOME` points straight at `~/.agent-ntfy` (first bullet), the directory step and the
+     old-daemon check are both skipped, but the keychain item is still moved — so step 1 is not optional on
+     that path either.
+   - macOS, if you had set `AGENT_NTFY_KEYCHAIN=<custom name>`: the migration only looks for the default item
+     (service `AGENT_NTFY_TOPICS`, account `agent-ntfy`). A pool stored under another service name is not
+     found, the new daemon then generates a fresh pool under the new name, and the phone has to subscribe
+     again. Before step 3, store that item's password value unchanged as an item with service
+     `AGENT_NTFY_TOPICS` and account `agent-ntfy` (Keychain Access, or `security find-generic-password -a
+     agent-ntfy -s <custom name> -w` followed by `security add-generic-password -a agent-ntfy -s
+     AGENT_NTFY_TOPICS -w '<that value>'`), so the migration finds it; setting `NTFY_CONNECTOR_KEYCHAIN` alone
+     does not help, because the account name changed as well.
+4. Rename any of these you have set in your own shell — the old names are never read, not even for their
+   value, so a leftover one does not silently keep working:
+
+   | old | new |
+   |---|---|
+   | `AGENT_NTFY_HOME` | `NTFY_CONNECTOR_HOME` |
+   | `AGENT_NTFY_TARGET` | `NTFY_CONNECTOR_TARGET` |
+   | `AGENT_NTFY_LANG` | `NTFY_CONNECTOR_LANG` |
+   | `AGENT_NTFY_URL` | `NTFY_CONNECTOR_URL` |
+   | `AGENT_NTFY_IPC` | `NTFY_CONNECTOR_IPC` |
+   | `AGENT_NTFY_STORE` | `NTFY_CONNECTOR_STORE` |
+   | `AGENT_NTFY_KEYCHAIN` | `NTFY_CONNECTOR_KEYCHAIN` |
+   | `AGENT_NTFY_TOPIC_PREFIX` | `NTFY_CONNECTOR_TOPIC_PREFIX` |
+
+5. If you copied `examples/remote-mode-rule.md` (or the Chinese version) into your own rule file before
+   upgrading, that copy will not update itself — edit it by hand: the injection markers are now
+   `[ntfy-connector remote] ` and `[ntfy-connector] ` (were `[agent-ntfy remote] ` and `[agent-ntfy] `), and
+   a hand-written path to `scripts/agent_ntfy.py` becomes `scripts/ntfy_connector.py`.
+6. If your project's own `.gitignore` lists `.agent-ntfy/`, change it to `.ntfy-connector/`. The state
+   directory carries its own `.gitignore`, which moves with it, so this is tidiness only — git never sees
+   the directory either way.
 
 ## 13. Integration: keeping the skill in force for the whole session
 
@@ -432,8 +498,8 @@ skill exists, which is not what you want while you are away. The trigger policy 
    decision — task finished, an error, the task cannot continue — never for progress chatter (quota, §8).
 4. **The human is back**: `release`, then `away off`; the daemon keeps running.
 
-A ready-made rule that does exactly this ships with the skill: [`examples/remote-mode-rule.md`](examples/remote-mode-rule.md)
-(English) and [`examples/remote-mode-rule.zh-CN.md`](examples/remote-mode-rule.zh-CN.md) (Chinese). It also covers
+A ready-made rule that does exactly this ships with the skill: [`examples/remote-mode-rule.md`](skill/agent-ntfy/examples/remote-mode-rule.md)
+(English) and [`examples/remote-mode-rule.zh-CN.md`](skill/agent-ntfy/examples/remote-mode-rule.zh-CN.md) (Chinese). It also covers
 teams of agent sessions (only the session that talks to the human holds remote mode). For Claude Code, rules in
 `~/.claude/rules/` are injected into every session:
 
@@ -444,3 +510,11 @@ cp ~/.claude/skills/agent-ntfy/examples/remote-mode-rule.md ~/.claude/rules/agen
 For other agents, put it wherever that agent loads its standing instructions. Adjust the `<skill dir>`
 path at the top and the trigger phrases ("I'm leaving", "I'm back") to your own habits; the rest is
 product behaviour and should stay as written.
+
+## 14. Repository layout & development
+
+- `src/` is the source of the CLI and the daemon. `skill/agent-ntfy/scripts/` is a byte-for-byte copy of it, written by `python3 scripts/sync-skill.py`: after editing `src/`, rerun it and commit both. CI runs the same script with `--check` and fails when the two differ.
+- `skill/agent-ntfy/` is everything an install picks up (§3): `SKILL.md`, `references/`, `examples/` and that `scripts/` copy.
+- `scripts/` at the repository root holds development tools only; it is not the `scripts/` inside the skill.
+- Tests: `NTFY_CONNECTOR_OFFLINE=1 python3 -m unittest discover -s tests -t . -v` (without the variable the suite also publishes to the real ntfy.sh; `NTFY_CONNECTOR_IPC=tcp` runs it on the transport Windows uses).
+- Type check: `pyright src/*.py tests/*.py scripts/*.py`, plus `pyright --pythonplatform Windows src/*.py` for the Windows-only branches, as in [`.github/workflows/test.yml`](.github/workflows/test.yml).
