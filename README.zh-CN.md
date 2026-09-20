@@ -103,10 +103,10 @@ npx skills add yezhoujie/agent-remote-communication-skills --skill agent-ntfy
 
 任何能把 `skills/agent-ntfy/` 放到 agent 加载 skill 位置的办法都行（`git clone` 后拷目录也一样）。要钉住某个版本，安装时带 git ref：`npx skills add 'yezhoujie/agent-remote-communication-skills#agent-ntfy/v0.1.3' --skill agent-ntfy`（§12）。
 
-CLI 就是目录里的 `scripts/agent_ntfy.py`。它自己的提示文案里管自己叫 `agent-ntfy`；配一个 alias 下面的命令会短很多：
+CLI 就是目录里的 `scripts/ntfy_connector.py`。它自己的提示文案里管自己叫 `agent-ntfy`；配一个 alias 下面的命令会短很多：
 
 ```bash
-alias agent-ntfy='python3 "<skills/agent-ntfy 的路径>/scripts/agent_ntfy.py"'
+alias agent-ntfy='python3 "<skills/agent-ntfy 的路径>/scripts/ntfy_connector.py"'
 ```
 
 ## 4. 你要动手的只有两件事
@@ -277,7 +277,7 @@ agent-ntfy away status    # 人读；加 --json 打印原文
 
 ## 11. CLI 参考
 
-`AGENT_NTFY_LANG=zh python3 scripts/agent_ntfy.py --help` 与各 `<子命令> --help` 的输出（`slots` 与 `add-slot` 没有选项），主目录显示为 `~`：
+`AGENT_NTFY_LANG=zh python3 scripts/ntfy_connector.py --help` 与各 `<子命令> --help` 的输出（`slots` 与 `add-slot` 没有选项），主目录显示为 `~`：
 
 ```
 usage: agent-ntfy [-h] [--lang {zh,en}] [--home HOME]

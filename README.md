@@ -108,11 +108,11 @@ For all projects at once, add `-g`: the files go to `~/.agents/skills/agent-ntfy
 
 Any other way of putting `skills/agent-ntfy/` where your agent loads skills works just as well (`git clone` and copy the folder). To pin a version, install with a git ref: `npx skills add 'yezhoujie/agent-remote-communication-skills#agent-ntfy/v0.1.3' --skill agent-ntfy` (§12).
 
-The CLI is `scripts/agent_ntfy.py` inside that directory. Its own messages call it `agent-ntfy`; an alias
+The CLI is `scripts/ntfy_connector.py` inside that directory. Its own messages call it `agent-ntfy`; an alias
 makes the commands below shorter:
 
 ```bash
-alias agent-ntfy='python3 "<path to skills/agent-ntfy>/scripts/agent_ntfy.py"'
+alias agent-ntfy='python3 "<path to skills/agent-ntfy>/scripts/ntfy_connector.py"'
 ```
 
 ## 4. Your two manual steps
@@ -297,7 +297,7 @@ Observed on a real phone; none is a bug.
 
 ## 11. CLI reference
 
-Output of `AGENT_NTFY_LANG=en python3 scripts/agent_ntfy.py --help` and `<subcommand> --help` (`slots` and `add-slot` take no options), with the home directory shown as `~`:
+Output of `AGENT_NTFY_LANG=en python3 scripts/ntfy_connector.py --help` and `<subcommand> --help` (`slots` and `add-slot` take no options), with the home directory shown as `~`:
 
 ```
 usage: agent-ntfy [-h] [--lang {zh,en}] [--home HOME]

@@ -1,6 +1,6 @@
 # The daemon, slots, and environment
 
-`agent-ntfy` below means `python3 <skill dir>/scripts/agent_ntfy.py` (on Windows the interpreter is `python`, as the test workflow runs it).
+`agent-ntfy` below means `python3 <skill dir>/scripts/ntfy_connector.py` (on Windows the interpreter is `python`, as the test workflow runs it).
 
 ## Contents
 
@@ -32,7 +32,7 @@ for the user. The only rule: **it must outlive you.**
 
 | where you are | do this |
 |---|---|
-| inside herdr (exercised on macOS; the pane command is a POSIX `env …` line, not tried on Windows) | `agent-ntfy away on` starts it in a new pane for you — and switches remote mode on (SKILL.md, "Remote mode"). By hand: `herdr pane split --current --direction right --cwd "$PWD" --no-focus` returns the new pane id (`.result.pane.pane_id`); then `herdr pane run <pane id> "python3 <skill dir>/scripts/agent_ntfy.py daemon"`. Visible, and herdr owns its lifetime |
+| inside herdr (exercised on macOS; the pane command is a POSIX `env …` line, not tried on Windows) | `agent-ntfy away on` starts it in a new pane for you — and switches remote mode on (SKILL.md, "Remote mode"). By hand: `herdr pane split --current --direction right --cwd "$PWD" --no-focus` returns the new pane id (`.result.pane.pane_id`); then `herdr pane run <pane id> "python3 <skill dir>/scripts/ntfy_connector.py daemon"`. Visible, and herdr owns its lifetime |
 | macOS / Linux, outside herdr | `agent-ntfy daemon --detach`: starts the daemon in its own session, prints `daemon: started in the background, pid N (log <home>/daemon.log)` once the endpoint answers |
 | Windows, outside herdr | `agent-ntfy daemon --detach`: starts it as a detached background process (no console window, by the `DETACHED_PROCESS` flag); same output. Run it from Git Bash like every other command in these docs (under WSL the skill runs as Linux) |
 

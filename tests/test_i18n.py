@@ -7,7 +7,7 @@ import unittest
 
 from pathlib import Path
 
-import agent_ntfy
+import ntfy_connector
 import daemon
 import inject
 import ipc
@@ -15,8 +15,8 @@ import render
 import texts
 import validate
 from inject import HerdrResult, Outcome
-import tests.test_agent_ntfy as ta
-from tests.test_agent_ntfy import HERDR, run
+import tests.test_ntfy_connector as ta
+from tests.test_ntfy_connector import HERDR, run
 from tests.test_daemon import Harness, wait_until
 from tests.test_inject import FakeHerdr, herdr_error
 from tests.test_render import NOTIFY, SAMPLE
@@ -176,10 +176,10 @@ class EnglishTest(unittest.TestCase):
         from unittest import mock
         h = Harness(self, lang="en")
         def broken(sock):
-            raise agent_ntfy.ProtocolError("not_object")
+            raise ntfy_connector.ProtocolError("not_object")
             yield  # noqa: unreachable，只为让它是生成器
 
-        with mock.patch("agent_ntfy.read_events", broken):  # daemon 回了个非对象
+        with mock.patch("ntfy_connector.read_events", broken):  # daemon 回了个非对象
             code, out, err = run(["--home", str(h.home), "ask", "--timeout", "5"], json.dumps({**SAMPLE, "lang": "en"}), {**HERDR, "AGENT_NTFY_LANG": "en"})
         self.assertEqual((code, cjk(err)), (3, 0), err)
 
@@ -196,7 +196,7 @@ class EnglishTest(unittest.TestCase):
         sock.close()
         with h.connect() as raw:  # 非对象的请求行：报错文案也不能混进中文
             raw.sendall(b"[1, 2]\n")
-            ev = next(agent_ntfy.read_events(raw))
+            ev = next(ntfy_connector.read_events(raw))
         self.assertEqual((ev["kind"], cjk(ev["message"])), ("bad_request", 0), ev)
         h2 = Harness(self, pool_size=1, subscribed=("slot1",), lang="en")
         h2.state.acquire("someone")
@@ -340,8 +340,8 @@ class SameSequenceTest(unittest.TestCase):
     def test_confirm_card_follows_the_request_language(self):
         h = Harness(self, subscribed=(), lang="en")
         sock = h.connect()
-        agent_ntfy.send_request(sock, {"cmd": "confirm-sub", "slot": "slot4", "subscribed": True, "timeout": 30, "lang": "zh"}, home=h.home)
-        events = agent_ntfy.read_events(sock)
+        ntfy_connector.send_request(sock, {"cmd": "confirm-sub", "slot": "slot4", "subscribed": True, "timeout": 30, "lang": "zh"}, home=h.home)
+        events = ntfy_connector.read_events(sock)
         self.assertEqual(next(events)["event"], "sent")
         self.assertEqual(h.client.published[-1]["title"], "[slot4] 确认你能收到通知")
         h.client.message(h.topic("slot4"), inject.control_mark("confirmed", "slot4"))
@@ -397,11 +397,11 @@ class RemainingLiteralsTest(unittest.TestCase):
         for lang, needle in (("en", "not a number"), ("zh", "不是数字")):
             errbuf = io.StringIO()
             with mock.patch.dict(os.environ, {"AGENT_NTFY_LANG": lang}), contextlib.redirect_stderr(errbuf), self.assertRaises(SystemExit):
-                agent_ntfy.main(["ask", "--timeout", "abc"])
+                ntfy_connector.main(["ask", "--timeout", "abc"])
             self.assertIn(needle, errbuf.getvalue())
         errbuf = io.StringIO()
         with mock.patch.dict(os.environ, {"AGENT_NTFY_LANG": "en"}), contextlib.redirect_stderr(errbuf), self.assertRaises(SystemExit):
-            agent_ntfy.main(["ask", "--timeout", "0"])
+            ntfy_connector.main(["ask", "--timeout", "0"])
         self.assertEqual(cjk(errbuf.getvalue()), 0, errbuf.getvalue())
 
     def test_ntfy_errors_reach_the_phone_and_cli_in_the_card_language(self):
@@ -433,13 +433,13 @@ class HelpTest(unittest.TestCase):
         for lang, needle, absent in (("en", "block and ask", "阻塞提问"), ("zh", "阻塞提问", "block and ask")):
             out = io.StringIO()
             with mock.patch.dict(os.environ, {"AGENT_NTFY_LANG": lang}), contextlib.redirect_stdout(out), self.assertRaises(SystemExit) as cm:
-                agent_ntfy.main(["--help"])
+                ntfy_connector.main(["--help"])
             self.assertEqual(cm.exception.code, 0)
             self.assertIn(needle, out.getvalue())
             self.assertNotIn(absent, out.getvalue())
         out = io.StringIO()
         with mock.patch.dict(os.environ, {"AGENT_NTFY_LANG": "en"}), contextlib.redirect_stdout(out), self.assertRaises(SystemExit):
-            agent_ntfy.main(["confirm-sub", "--help"])
+            ntfy_connector.main(["confirm-sub", "--help"])
         self.assertEqual(cjk(out.getvalue()), 0, out.getvalue())
 
     def test_notify_help_follows_env_language(self):
@@ -449,13 +449,13 @@ class HelpTest(unittest.TestCase):
         for lang, argv in (("en", ["--help"]), ("en", ["notify", "--help"])):
             out = io.StringIO()
             with mock.patch.dict(os.environ, {"AGENT_NTFY_LANG": lang}), contextlib.redirect_stdout(out), self.assertRaises(SystemExit) as cm:
-                agent_ntfy.main(argv)
+                ntfy_connector.main(argv)
             self.assertEqual(cm.exception.code, 0)
             self.assertIn("notify", out.getvalue())
             self.assertEqual(cjk(out.getvalue()), 0, out.getvalue())
         out = io.StringIO()
         with mock.patch.dict(os.environ, {"AGENT_NTFY_LANG": "zh"}), contextlib.redirect_stdout(out), self.assertRaises(SystemExit):
-            agent_ntfy.main(["--help"])
+            ntfy_connector.main(["--help"])
         self.assertIn(texts.t("help.notify", "zh"), out.getvalue())
 
 

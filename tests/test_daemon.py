@@ -15,7 +15,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import agent_ntfy
+import ntfy_connector
 import daemon
 import ipc
 import render
@@ -187,19 +187,19 @@ class Harness:
         return self.state.topic_of(slot)
 
     def connect(self):
-        return agent_ntfy.connect(self.home)
+        return ntfy_connector.connect(self.home)
 
     def request(self, **req):
         """一问一答的命令：发一行（按传输补口令），收全部事件直到对端关连接。"""
         with self.connect() as sock:
-            agent_ntfy.send_request(sock, req, home=self.home)
-            return list(agent_ntfy.read_events(sock))
+            ntfy_connector.send_request(sock, req, home=self.home)
+            return list(ntfy_connector.read_events(sock))
 
     def confirm(self, slot, *, again=False, timeout: float = 30):
         """发 confirm-sub 并读到第一条事件（topic / already_confirmed / error），把连接交回去继续。"""
         sock = self.connect()
-        agent_ntfy.send_request(sock, {"cmd": "confirm-sub", "slot": slot, "again": again, "timeout": timeout}, home=self.home)
-        events = agent_ntfy.read_events(sock)
+        ntfy_connector.send_request(sock, {"cmd": "confirm-sub", "slot": slot, "again": again, "timeout": timeout}, home=self.home)
+        events = ntfy_connector.read_events(sock)
         return sock, next(events), events
 
     def notify(self, *, leased_by="proj:/w/me", tag: str | None = "me", **extra):
@@ -210,8 +210,8 @@ class Harness:
     def ask(self, *, leased_by="wD:p1", tag: str | None = "wD:p1", timeout: float = 30, payload=None, **extra):
         """发 ask 并读到 sent（或首个终态事件），把连接交回去继续读。extra（pane / require_confirmed …）原样进请求；不给就是旧客户端形态。"""
         sock = self.connect()
-        agent_ntfy.send_request(sock, {"cmd": "ask", "payload": payload or SAMPLE, "leased_by": leased_by, "tag": tag, "timeout": timeout, **extra}, home=self.home)
-        events = agent_ntfy.read_events(sock)
+        ntfy_connector.send_request(sock, {"cmd": "ask", "payload": payload or SAMPLE, "leased_by": leased_by, "tag": tag, "timeout": timeout, **extra}, home=self.home)
+        events = ntfy_connector.read_events(sock)
         first = next(events)
         return sock, first, events
 
@@ -736,7 +736,7 @@ class CommandsTest(unittest.TestCase):
             sock.sendall(line[:8])
             time.sleep(0.1)
             sock.sendall(line[8:] + b"\n")
-            evs = list(agent_ntfy.read_events(sock))
+            evs = list(ntfy_connector.read_events(sock))
         self.assertEqual(evs[0]["event"], "slots")
 
     def test_release_unknown_leased_by(self):
@@ -772,7 +772,7 @@ class CommandsTest(unittest.TestCase):
         h = Harness(self)
         with h.connect() as sock:
             sock.sendall(b"not json\n")
-            evs = list(agent_ntfy.read_events(sock))
+            evs = list(ntfy_connector.read_events(sock))
         self.assertEqual((evs[0]["event"], evs[0]["kind"]), ("error", "bad_request"))
 
 
@@ -903,9 +903,9 @@ class SubscriptionTest(unittest.TestCase):
         th.start()
         self.addCleanup(lambda: (d.stop(), th.join(5)))
         wait_until(lambda: (home / "daemon.pid").read_text().strip() == str(os.getpid()) if (home / "daemon.pid").exists() else False, what="新实例写了自己的 pid")
-        with agent_ntfy.connect(home) as sock:
-            agent_ntfy.send_request(sock, {"cmd": "status"}, home=home)
-            self.assertEqual(next(agent_ntfy.read_events(sock))["pid"], os.getpid())
+        with ntfy_connector.connect(home) as sock:
+            ntfy_connector.send_request(sock, {"cmd": "status"}, home=home)
+            self.assertEqual(next(ntfy_connector.read_events(sock))["pid"], os.getpid())
 
     # 单例靠 bind 而不是 pid 文件：状态初始化再慢，第二个实例也拿不到 socket
     def test_concurrent_start_only_one_wins(self):
@@ -929,9 +929,9 @@ class SubscriptionTest(unittest.TestCase):
             b.run()
         gate.set()
         wait_until(lambda: a.state is not None, what="A 完成初始化")
-        with agent_ntfy.connect(home) as sock:
-            agent_ntfy.send_request(sock, {"cmd": "status"}, home=home)
-            self.assertEqual(next(agent_ntfy.read_events(sock))["pool"], 2)
+        with ntfy_connector.connect(home) as sock:
+            ntfy_connector.send_request(sock, {"cmd": "status"}, home=home)
+            self.assertEqual(next(ntfy_connector.read_events(sock))["pool"], 2)
 
     # 状态初始化失败（钥匙串读写失败是首跑最常见的失败）：要落日志、包成 DaemonError、不留 socket 残骸
     def test_state_failure_is_logged_and_wrapped(self):
@@ -1054,7 +1054,7 @@ class ConfirmTest(unittest.TestCase):
         """走到「测试消息已发出」：topic → ready → sent。返回 (sock, events, sent 事件)。"""
         sock, first, events = h.confirm(slot, **kw)
         self.assertEqual(first["event"], "topic", first)
-        agent_ntfy.send_request(sock, {"ready": True})
+        ntfy_connector.send_request(sock, {"ready": True})
         sent = next(events)
         self.assertEqual(sent["event"], "sent", sent)
         return sock, events, sent
@@ -1065,7 +1065,7 @@ class ConfirmTest(unittest.TestCase):
         self.assertEqual(first, {"event": "topic", "topic": h.topic("slot4"), "url": h.client.topic_url(h.topic("slot4"))})
         time.sleep(0.15)
         self.assertEqual(h.client.published, [])  # 用户还没订阅：没按 ready 之前不发
-        agent_ntfy.send_request(sock, {"ready": True})
+        ntfy_connector.send_request(sock, {"ready": True})
         sent = next(events)
         pub = h.client.published[-1]
         self.assertEqual(sent, {"event": "sent", "slot": "slot4", "id": pub["id"]})
@@ -1091,8 +1091,8 @@ class ConfirmTest(unittest.TestCase):
     def test_subscribed_flag_skips_topic_phase_and_publishes_at_once(self):
         h = Harness(self, subscribed=())
         sock = h.connect()
-        agent_ntfy.send_request(sock, {"cmd": "confirm-sub", "slot": "slot4", "subscribed": True, "timeout": 30}, home=h.home)
-        events = agent_ntfy.read_events(sock)
+        ntfy_connector.send_request(sock, {"cmd": "confirm-sub", "slot": "slot4", "subscribed": True, "timeout": 30}, home=h.home)
+        events = ntfy_connector.read_events(sock)
         first = next(events)
         self.assertEqual(first["event"], "sent", first)  # 没有 topic 事件：topic 名不出 daemon
         self.assertEqual(h.client.published[-1]["title"], "[slot4] 确认你能收到通知")
@@ -1244,7 +1244,7 @@ class ConfirmTest(unittest.TestCase):
         sock = h.connect()
         req = json.dumps(ipc.stamp({"cmd": "confirm-sub", "slot": "slot4", "timeout": 30}, h.home)) + "\n" + json.dumps({"ready": True}) + "\n"
         sock.sendall(req.encode("utf-8"))  # 两行一个包到达
-        events = agent_ntfy.read_events(sock)
+        events = ntfy_connector.read_events(sock)
         self.assertEqual(next(events)["event"], "topic")
         self.assertEqual(next(events)["event"], "sent")
         sock.close()
@@ -1264,9 +1264,9 @@ class ConfirmTest(unittest.TestCase):
         sock.sendall(b'not json\n{"ready": false}\n')
         time.sleep(0.1)
         self.assertEqual(h.client.published, [])
-        agent_ntfy.send_request(sock, {"ready": True})
+        ntfy_connector.send_request(sock, {"ready": True})
         self.assertEqual(next(events)["event"], "sent")
-        agent_ntfy.send_request(sock, {"ready": True})  # 发过了再 ready：不重发
+        ntfy_connector.send_request(sock, {"ready": True})  # 发过了再 ready：不重发
         time.sleep(0.1)
         self.assertEqual(len(h.client.published), 1)
         sock.close()
@@ -1300,7 +1300,7 @@ class ConfirmTest(unittest.TestCase):
         self.assertIn("断开", warn["message"])
         sock.close()
 
-    # CLI 发 ready 之前只凭「socket 可读」判断终态是否已到（agent_ntfy.cmd_confirm_sub）：前提是 topic 段 daemon 不往这条连接
+    # CLI 发 ready 之前只凭「socket 可读」判断终态是否已到（ntfy_connector.cmd_confirm_sub）：前提是 topic 段 daemon 不往这条连接
     # 发任何非终态事件——断线 / 恢复告警与手机来文字的 warning 都以 msg_id 为门，等测试消息发出之后才发。拿一条正等着的 ask
     # 当对照：同一时刻它收到了两条 warning，确认连接一行都没有
     def test_nothing_reaches_the_confirm_connection_between_topic_and_ready(self):
@@ -1311,7 +1311,7 @@ class ConfirmTest(unittest.TestCase):
         sock = h.connect()
         self.addCleanup(sock.close)
         sock.settimeout(5)
-        agent_ntfy.send_request(sock, {"cmd": "confirm-sub", "slot": "slot4", "again": False, "timeout": 30}, home=h.home)
+        ntfy_connector.send_request(sock, {"cmd": "confirm-sub", "slot": "slot4", "again": False, "timeout": 30}, home=h.home)
         buf = b""
         while b"\n" not in buf:
             buf += sock.recv(65536)
@@ -1325,8 +1325,8 @@ class ConfirmTest(unittest.TestCase):
             h.client.message(h.topic("slot4"), "我收到了")  # 触发二：手机来的文字（不是按钮）
             wait_until(lambda: any("确认中收到文字" in r.getMessage() for r in logs.records), what="daemon 处理了那条文字")
         self.assertEqual(select.select([sock], [], [], 0.5), ([], [], []))  # 0.5 s 内一行都没有
-        agent_ntfy.send_request(sock, {"ready": True})
-        events = agent_ntfy.read_events(sock)
+        ntfy_connector.send_request(sock, {"ready": True})
+        events = ntfy_connector.read_events(sock)
         self.assertEqual(next(events)["event"], "sent")
         h.client.message(h.topic("slot4"), inject.control_mark("confirmed", "slot4"))
         self.assertEqual(next(events)["event"], "confirmed")
@@ -1335,8 +1335,8 @@ class ConfirmTest(unittest.TestCase):
         h = Harness(self, subscribed=())
         h.client.fail_publish = "ntfy 不通"
         sock = h.connect()
-        agent_ntfy.send_request(sock, {"cmd": "confirm-sub", "slot": "slot4", "subscribed": True, "timeout": 30}, home=h.home)
-        events = agent_ntfy.read_events(sock)
+        ntfy_connector.send_request(sock, {"cmd": "confirm-sub", "slot": "slot4", "subscribed": True, "timeout": 30}, home=h.home)
+        events = ntfy_connector.read_events(sock)
         ev = next(events)
         self.assertEqual((ev["event"], ev["kind"], ev["sent"]), ("error", "publish_failed", False))
         with self.assertRaises(StopIteration):
@@ -1360,7 +1360,7 @@ class ConfirmTest(unittest.TestCase):
         sock = h.connect()
         req = json.dumps(ipc.stamp({"cmd": "confirm-sub", "slot": "slot4", "timeout": 30}, h.home)) + "\n" + json.dumps({"ready": True}) + "\n" + json.dumps({"ready": True}) + "\n"
         sock.sendall(req.encode("utf-8"))
-        events = agent_ntfy.read_events(sock)
+        events = ntfy_connector.read_events(sock)
         self.assertEqual(next(events)["event"], "topic")
         ev = next(events)
         self.assertEqual((ev["event"], ev["kind"]), ("error", "publish_failed"))
@@ -1374,7 +1374,7 @@ class ConfirmTest(unittest.TestCase):
         sock, first, events = h.confirm("slot4")  # 还没 ready：测试消息没发，「请点按钮」这句没意义
         h.client.message(h.topic("slot4"), "这是啥")
         wait_until(lambda: "不算确认" in (h.home / "daemon.log").read_text(encoding="utf-8"), what="文字被记日志")
-        agent_ntfy.send_request(sock, {"ready": True})
+        ntfy_connector.send_request(sock, {"ready": True})
         self.assertEqual(next(events)["event"], "sent")  # 文字处理完了才发 ready：中间没有 warning
         sock.close()
 
@@ -1817,12 +1817,12 @@ class TcpProtocolTest(ProtocolSmokeMixin, unittest.TestCase):
     def test_missing_or_wrong_token_is_rejected(self):
         h = Harness(self)
         with h.connect() as sock:
-            agent_ntfy.send_request(sock, {"cmd": "status"})  # 不带口令
-            events = list(agent_ntfy.read_events(sock))
+            ntfy_connector.send_request(sock, {"cmd": "status"})  # 不带口令
+            events = list(ntfy_connector.read_events(sock))
         self.assertEqual((events[0]["event"], events[0]["kind"], events[0]["sent"]), ("error", "unauthorized", False))
         with h.connect() as sock:
-            agent_ntfy.send_request(sock, {"cmd": "status", "token": "x" * 32})
-            self.assertEqual(list(agent_ntfy.read_events(sock))[0]["kind"], "unauthorized")
+            ntfy_connector.send_request(sock, {"cmd": "status", "token": "x" * 32})
+            self.assertEqual(list(ntfy_connector.read_events(sock))[0]["kind"], "unauthorized")
         self.assertEqual(h.request(cmd="status")[0]["event"], "status")  # 带对口令的照常
 
 

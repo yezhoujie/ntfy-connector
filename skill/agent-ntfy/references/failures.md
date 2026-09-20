@@ -3,7 +3,7 @@
 Every failure is loud: a non-zero exit plus a stderr line that says what happened **and whether the
 message was sent**. Never treat an empty stdout as "no answer yet": read `rc` first.
 
-`agent-ntfy` in the quoted stderr text is the CLI's own name for itself; on disk it is `scripts/agent_ntfy.py`.
+`agent-ntfy` in the quoted stderr text is the CLI's own name for itself; on disk it is `scripts/ntfy_connector.py`.
 
 ## Contents
 
@@ -122,7 +122,7 @@ The channel never asks the human anything itself (stdout is captured, so a promp
 agent-ntfy: message NOT sent: Slot slot1 has not been confirmed to reach the phone yet. Ask the user to run agent-ntfy confirm-sub slot1 in their own terminal, subscribe and tap the button as prompted, then retry
 ```
 
-Inside herdr you can do more than relay: run `confirm-sub slot1` yourself; it opens a pane for the user and tells you the three steps to relay (daemon.md §5). Outside herdr, tell the user: run `python3 <skill dir>/scripts/agent_ntfy.py confirm-sub slot1` in their own terminal (it prints the topic name, which must not pass through your output), subscribe in the ntfy app, press Enter, and tap the button on the test notification. If the user says they already subscribed that topic, you may run `confirm-sub slot1 --subscribed` yourself (no topic is printed); it still needs the tap on the phone. If the test notification never pops up, the phone's notification settings are the problem; the skill's README (for humans) has the checklist.
+Inside herdr you can do more than relay: run `confirm-sub slot1` yourself; it opens a pane for the user and tells you the three steps to relay (daemon.md §5). Outside herdr, tell the user: run `python3 <skill dir>/scripts/ntfy_connector.py confirm-sub slot1` in their own terminal (it prints the topic name, which must not pass through your output), subscribe in the ntfy app, press Enter, and tap the button on the test notification. If the user says they already subscribed that topic, you may run `confirm-sub slot1 --subscribed` yourself (no topic is printed); it still needs the tap on the phone. If the test notification never pops up, the phone's notification settings are the problem; the skill's README (for humans) has the checklist.
 
 **All slots leased**:
 

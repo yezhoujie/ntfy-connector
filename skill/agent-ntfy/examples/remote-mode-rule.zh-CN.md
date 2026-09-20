@@ -4,7 +4,7 @@
 > 什么时候用由这样一条规则定。Claude Code 用户把本文件复制到 `~/.claude/rules/`（每个会话自动注入）即可；
 > 其他 agent 放到它常驻加载的位置。英文版见 `remote-mode-rule.md`。
 >
-> 下文 `$AN` = `python3 <skill dir>/scripts/agent_ntfy.py`；Claude Code 全局安装时 `<skill dir>` 是 `~/.claude/skills/agent-ntfy`。怎么写一张提问卡看 SKILL.md。
+> 下文 `$AN` = `python3 <skill dir>/scripts/ntfy_connector.py`；Claude Code 全局安装时 `<skill dir>` 是 `~/.claude/skills/agent-ntfy`。怎么写一张提问卡看 SKILL.md。
 
 ## 状态在哪：`<项目根>/.agent-ntfy/state.json`（CLI 写，你只读）
 - **会话开始 / 上下文被清空或重置后**，先 `$AN away status --json`：`away: true` ⇒ 本项目已在远程模式，照「模式内」办；文件不存在或 `false` ⇒ 正常终端交互。

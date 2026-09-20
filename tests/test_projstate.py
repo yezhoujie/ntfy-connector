@@ -13,7 +13,7 @@ from pathlib import Path
 from unittest import mock
 
 import projstate
-import tests.test_agent_ntfy as ta
+import tests.test_ntfy_connector as ta
 from tests.test_daemon import Harness, wait_until
 from tests.test_inject import FakeHerdr
 from tests.test_render import SAMPLE
@@ -182,7 +182,7 @@ class AwayCommandTest(unittest.TestCase):
     def test_on_off_status(self):
         root, sub = git_repo(self)
         h = Harness(self)
-        with chdir(sub), mock.patch("agent_ntfy.herdr_run", FakeHerdr()):
+        with chdir(sub), mock.patch("ntfy_connector.herdr_run", FakeHerdr()):
             code, out, err = ta.run(["--home", str(h.home), "away", "on"], env=ta.HERDR, root=ta.CWD)
             self.assertEqual((code, err), (0, ""))
             self.assertIn("开", out)
@@ -235,8 +235,8 @@ class AwayCommandTest(unittest.TestCase):
         root = plain_dir(self)
         (root / projstate.DIR_NAME).write_text("not a dir", encoding="utf-8")
         fake = FakeHerdr()
-        with chdir(root), mock.patch("agent_ntfy.herdr_run", fake), mock.patch("agent_ntfy.probe", return_value=None) as probe, \
-                mock.patch("agent_ntfy._spawn_daemon") as spawn:
+        with chdir(root), mock.patch("ntfy_connector.herdr_run", fake), mock.patch("ntfy_connector.probe", return_value=None) as probe, \
+                mock.patch("ntfy_connector._spawn_daemon") as spawn:
             code, out, err = ta.run(["--home", "/nonexistent/agent-ntfy-home", "away", "on"], root=ta.CWD)
             self.assertEqual((code, out), (3, ""))
             self.assertIn("状态文件读写失败", err)

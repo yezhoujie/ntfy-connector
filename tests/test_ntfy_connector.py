@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import agent_ntfy
+import ntfy_connector
 import inject
 import ipc
 import platform_
@@ -52,7 +52,7 @@ def run(argv, stdin_text="", env=None, root=None):
             root = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="proj-"))).resolve()
         if root is not CWD:
             stack.enter_context(mock.patch.object(projstate, "project_root", return_value=Path(root)))
-        code = agent_ntfy.main(argv)
+        code = ntfy_connector.main(argv)
     return code, out.getvalue(), errbuf.getvalue()
 
 
@@ -86,30 +86,30 @@ class IdentityTest(unittest.TestCase):
 
     def test_outside_herdr_owner_is_the_project_and_tag_its_dir_name(self):
         with self.env():
-            ident = agent_ntfy.identity()
+            ident = ntfy_connector.identity()
         self.assertEqual(ident, (owner(self.root), None, self.root.name))
         self.assertEqual((ident.leased_by, ident.pane, ident.tag), (owner(self.root), None, self.root.name))
         self.assertNotIn("sid:", ident.leased_by)  # 不再是主机名 + 会话 id
 
     def test_inside_herdr_adds_pane_but_owner_is_still_the_project(self):
         with self.env(**HERDR):
-            self.assertEqual(agent_ntfy.identity(), (owner(self.root), "wD:p1", self.root.name))
+            self.assertEqual(ntfy_connector.identity(), (owner(self.root), "wD:p1", self.root.name))
 
     def test_pane_needs_herdr_env_not_just_a_pane_id(self):
         with self.env(HERDR_PANE_ID="wD:p1"):  # 残留的变量：不在 herdr 里就没有注入目标
-            self.assertIsNone(agent_ntfy.identity().pane)
+            self.assertIsNone(ntfy_connector.identity().pane)
         with self.env(HERDR_ENV="1"):
-            self.assertIsNone(agent_ntfy.identity().pane)
+            self.assertIsNone(ntfy_connector.identity().pane)
 
     def test_target_override_wins_inside_and_outside_herdr(self):
         with self.env(AGENT_NTFY_TARGET="my-project"):
-            self.assertEqual(agent_ntfy.identity(), ("my-project", None, self.root.name))
+            self.assertEqual(ntfy_connector.identity(), ("my-project", None, self.root.name))
         with self.env(AGENT_NTFY_TARGET="my-project", **HERDR):
-            self.assertEqual(agent_ntfy.identity(), ("my-project", "wD:p1", self.root.name))
+            self.assertEqual(ntfy_connector.identity(), ("my-project", "wD:p1", self.root.name))
 
     def test_tag_falls_back_to_owner_when_root_has_no_name(self):
         with mock.patch.object(projstate, "project_root", return_value=Path("/")), self.env():
-            ident = agent_ntfy.identity()
+            ident = ntfy_connector.identity()
         self.assertEqual(ident.tag, ident.leased_by)
 
 
@@ -123,17 +123,17 @@ class RequireConfirmedTest(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     def test_false_without_dir_or_switch(self):
-        self.assertFalse(agent_ntfy.require_confirmed())  # 没启用过
+        self.assertFalse(ntfy_connector.require_confirmed())  # 没启用过
         projstate.ensure(self.root)
-        self.assertFalse(agent_ntfy.require_confirmed())  # 目录在、文件不在
+        self.assertFalse(ntfy_connector.require_confirmed())  # 目录在、文件不在
         projstate.save(self.root, away=False)
-        self.assertFalse(agent_ntfy.require_confirmed())
+        self.assertFalse(ntfy_connector.require_confirmed())
         projstate.save(self.root, away="true")  # 脏值不算开
-        self.assertFalse(agent_ntfy.require_confirmed())
+        self.assertFalse(ntfy_connector.require_confirmed())
 
     def test_true_when_away_is_on(self):
         projstate.save(self.root, away=True)
-        self.assertTrue(agent_ntfy.require_confirmed())
+        self.assertTrue(ntfy_connector.require_confirmed())
 
 
 class AskExitCodesTest(unittest.TestCase):
@@ -244,13 +244,13 @@ class AskExitCodesTest(unittest.TestCase):
     # Ctrl-C：不带 traceback，退出码 130（shell 的 SIGINT 惯例），stderr 说明消息发了没有
     def test_keyboard_interrupt_exit_3(self):
         h = Harness(self)
-        real = agent_ntfy.read_events
+        real = ntfy_connector.read_events
 
         def interrupt_after_sent(sock):
             for ev in real(sock):
                 yield ev
                 raise KeyboardInterrupt
-        with mock.patch.object(agent_ntfy, "read_events", interrupt_after_sent):
+        with mock.patch.object(ntfy_connector, "read_events", interrupt_after_sent):
             code, out, err = run(["--home", str(h.home), "ask"], json.dumps(SAMPLE), HERDR)
         self.assertEqual((code, out), (130, ""))
         self.assertIn("中断", err)
@@ -376,10 +376,10 @@ class NotifyExitCodesTest(unittest.TestCase):
         h = Harness(self)
 
         def broken(sock):
-            raise agent_ntfy.ProtocolError("not_object")
+            raise ntfy_connector.ProtocolError("not_object")
             yield  # noqa: unreachable，只为让它是生成器
 
-        with mock.patch.object(agent_ntfy, "read_events", broken):
+        with mock.patch.object(ntfy_connector, "read_events", broken):
             code, out, err = run(["--home", str(h.home), "notify"], json.dumps(NOTIFY), HERDR)
         self.assertEqual((code, out), (3, ""))
         self.assertIn("消息未发送", err)
@@ -389,7 +389,7 @@ class NotifyExitCodesTest(unittest.TestCase):
     def test_no_timeout_option(self):
         out = io.StringIO()
         with mock.patch.dict(os.environ, {"AGENT_NTFY_LANG": "zh"}), contextlib.redirect_stdout(out), self.assertRaises(SystemExit) as cm:
-            agent_ntfy.main(["notify", "--help"])
+            ntfy_connector.main(["notify", "--help"])
         self.assertEqual(cm.exception.code, 0)
         self.assertNotIn("--timeout", out.getvalue())
         with self.assertRaises(SystemExit) as cm:
@@ -470,7 +470,7 @@ class ConfirmSubTest(unittest.TestCase):
         environ.update(env or {})
         with mock.patch.dict(os.environ, environ, clear=True), mock.patch("sys.stdin", stdin or io.StringIO(stdin_text)), \
                 mock.patch("sys.stdout", tty_out), mock.patch.object(tty_out, "isatty", return_value=True), contextlib.redirect_stderr(errbuf):
-            code = agent_ntfy.main(argv)
+            code = ntfy_connector.main(argv)
         return code, tty_out.getvalue(), errbuf.getvalue()
 
     def test_default_on_non_tty_exits_4_without_touching_daemon(self):
@@ -489,7 +489,7 @@ class ConfirmSubTest(unittest.TestCase):
     # 失败 / 超时不问；不带旗标不问；不在 herdr 窗格里不问
     def _confirm_on_tty(self, h, argv, stdin_text, *, env=None):
         fake = FakeHerdr()
-        with mock.patch("agent_ntfy.herdr_run", fake):
+        with mock.patch("ntfy_connector.herdr_run", fake):
             code, out, err = self.run_on_tty(argv, stdin_text=stdin_text, env={**HERDR, **(env or {})})
         return code, out, err, fake
 
@@ -528,7 +528,7 @@ class ConfirmSubTest(unittest.TestCase):
         # agent 自己（stdout 被捕获）在 herdr 里跑 confirm-sub --close-pane：走「已确认过」/「开窗格」两条非 TTY 路径都退 0，
         # 但此时 HERDR_PANE_ID 是 agent 自己的窗格——绝不能问、更不能关
         fake = FakeHerdr()
-        with mock.patch("agent_ntfy.herdr_run", fake):
+        with mock.patch("ntfy_connector.herdr_run", fake):
             h = Harness(self)  # slot1 已过闸
             code, out, err = run(["--home", str(h.home), "confirm-sub", "slot1", "--close-pane"], "\n", env=HERDR)
             self.assertEqual(code, 0, err)
@@ -559,7 +559,7 @@ class ConfirmSubTest(unittest.TestCase):
         self.assertEqual(fake.calls[-1][4], "[agent-ntfy] " + Z("cli.confirm.report.timeout", slot="slot4"))
         h2 = Harness(self, subscribed=())
         fake2 = FakeHerdr()
-        with mock.patch("agent_ntfy.herdr_run", fake2), mock.patch("agent_ntfy.send_request", side_effect=KeyboardInterrupt):
+        with mock.patch("ntfy_connector.herdr_run", fake2), mock.patch("ntfy_connector.send_request", side_effect=KeyboardInterrupt):
             code2, out2, err2 = self.run_on_tty(["--home", str(h2.home), "confirm-sub", "slot4", "--timeout", "5", "--report-to", "wD:p1"], stdin_text="\n", env=HERDR)
         self.assertEqual(code2, 130)
         self.assertEqual(fake2.calls[-1][4], "[agent-ntfy] " + Z("cli.confirm.report.cancelled", slot="slot4"))
@@ -569,7 +569,7 @@ class ConfirmSubTest(unittest.TestCase):
         self.click_when_sent(h, "slot4")
         fake = FakeHerdr()
         fake.prompt_result = ti.HerdrResult(rc=1, stdout="", stderr=herdr_error("agent:prompt", "agent_blocked"))
-        with mock.patch("agent_ntfy.herdr_run", fake):
+        with mock.patch("ntfy_connector.herdr_run", fake):
             code, out, err = self.run_on_tty(["--home", str(h.home), "confirm-sub", "slot4", "--timeout", "5", "--report-to", "wD:p1"], stdin_text="\n", env=HERDR)
         self.assertEqual(code, 0)  # 确认本身成功，退出码不变
         self.assertIn("wD:p1", err)  # 只报一句没送回
@@ -585,7 +585,7 @@ class ConfirmSubTest(unittest.TestCase):
 
     def test_report_to_on_non_tty_never_injects(self):
         fake = FakeHerdr()
-        with mock.patch("agent_ntfy.herdr_run", fake):
+        with mock.patch("ntfy_connector.herdr_run", fake):
             h = Harness(self)  # slot1 已过闸 ⇒「已确认过」非 TTY 路径退 0
             code, out, err = run(["--home", str(h.home), "confirm-sub", "slot1", "--report-to", "wD:p1"], "\n", env=HERDR)
         self.assertEqual(code, 0, err)
@@ -595,7 +595,7 @@ class ConfirmSubTest(unittest.TestCase):
         h = Harness(self, subscribed=())
         self.click_when_sent(h, "slot4")
         fake = FakeHerdr()
-        with mock.patch("agent_ntfy.herdr_run", fake):
+        with mock.patch("ntfy_connector.herdr_run", fake):
             code, out, err = self.run_on_tty(["--home", str(h.home), "confirm-sub", "slot4", "--timeout", "5", "--close-pane"], stdin_text="\n\n")
         self.assertEqual(code, 0, err)
         self.assertNotIn(Z("cli.confirm.close_pane").strip(), out)
@@ -677,7 +677,7 @@ class ConfirmSubTest(unittest.TestCase):
             def __getattr__(self, name):  # sendall / fileno / close 原样交给真 socket
                 return getattr(self.real, name)
 
-        real_connect, real_send = agent_ntfy.connect, agent_ntfy.send_request
+        real_connect, real_send = ntfy_connector.connect, ntfy_connector.send_request
         ready_sent = []
 
         def fake_send(sock, req, *, home=None):
@@ -687,8 +687,8 @@ class ConfirmSubTest(unittest.TestCase):
                 raise OSError(10053, "An established connection was aborted by the software in your host machine")
             real_send(sock, req, home=home)
 
-        with mock.patch.object(agent_ntfy, "connect", lambda home: AbortableSocket(real_connect(home))), \
-                mock.patch.object(agent_ntfy, "send_request", fake_send):
+        with mock.patch.object(ntfy_connector, "connect", lambda home: AbortableSocket(real_connect(home))), \
+                mock.patch.object(ntfy_connector, "send_request", fake_send):
             code, out, err = self.run_on_tty(["--home", str(h.home), "confirm-sub", "slot4", "--timeout", "0.5"], stdin=SlowStdin())
         self.assertEqual(code, 2, err)  # 不探就发：3 + 「通信失败 … 10053」
         self.assertEqual(ready_sent, [], "终态已在缓冲区里，ready 就不该发")
@@ -754,7 +754,7 @@ class ConfirmSubTest(unittest.TestCase):
 
     def test_topic_event_under_subscribed_is_a_protocol_error(self):
         h = Harness(self, subscribed=())
-        with mock.patch("agent_ntfy.read_events", lambda sock: iter([{"event": "topic", "topic": "not-a-real-topic", "url": "x"}])):
+        with mock.patch("ntfy_connector.read_events", lambda sock: iter([{"event": "topic", "topic": "not-a-real-topic", "url": "x"}])):
             code, out, err = run(["--home", str(h.home), "confirm-sub", "slot4", "--subscribed", "--timeout", "5"])
         self.assertEqual((code, out), (3, ""))  # 说了不要 topic 还收到：两端各守一道，topic 名不打印
         self.assertNotIn("not-a-real-topic", out + err)
@@ -827,7 +827,7 @@ class ConfirmSubTest(unittest.TestCase):
     # 已有 daemon 在跑：--detach 不起第二个（判据是探活，不是 pid 文件）
     def test_detach_refuses_when_a_daemon_answers(self):
         h = Harness(self)
-        with mock.patch("agent_ntfy._spawn_daemon") as spawn:
+        with mock.patch("ntfy_connector._spawn_daemon") as spawn:
             code, out, err = run(["--home", str(h.home), "daemon", "--detach"])
         self.assertEqual((code, out), (3, ""))
         self.assertIn(Z("cli.detach.already"), err)
@@ -843,7 +843,7 @@ class ConfirmSubTest(unittest.TestCase):
     # 刚起来还没连上 ntfy 时，--status 不能打出「断开 None 秒」
     def test_status_before_first_connection_says_connecting(self):
         h = Harness(self)
-        with mock.patch.object(agent_ntfy, "probe", return_value={"event": "status", "pid": os.getpid(), "subscribed": False,
+        with mock.patch.object(ntfy_connector, "probe", return_value={"event": "status", "pid": os.getpid(), "subscribed": False,
                                                                    "disconnected_for": None, "pending": 0, "confirming": 0, "pool": 5}):
             code, out, err = run(["--home", str(h.home), "daemon", "--status"])
         self.assertEqual(code, 0)
@@ -876,9 +876,9 @@ class ConfirmSubTest(unittest.TestCase):
         home.mkdir()
         (home / "daemon.pid").write_text("4242\n")
         started = time.monotonic()
-        with mock.patch.object(agent_ntfy, "probe", return_value={"event": "status", "pid": 4242}), \
-                mock.patch.object(agent_ntfy, "request", return_value={"event": "stopping", "pid": 4242}), \
-                mock.patch.object(agent_ntfy, "STOP_TIMEOUT", 0.5):
+        with mock.patch.object(ntfy_connector, "probe", return_value={"event": "status", "pid": 4242}), \
+                mock.patch.object(ntfy_connector, "request", return_value={"event": "stopping", "pid": 4242}), \
+                mock.patch.object(ntfy_connector, "STOP_TIMEOUT", 0.5):
             code, out, err = run(["--home", str(home), "daemon", "--stop"])
         self.assertEqual((code, out), (1, ""))
         self.assertIn(Z("cli.stop.timeout", pid=4242), err)
@@ -893,7 +893,7 @@ class ConfirmSubTest(unittest.TestCase):
         listener, cleanup = ipc.listen(home)  # 端点绑上了（连接能进 backlog），但没人 accept、没人回话：就是卡在初始化的样子
         self.addCleanup(cleanup)
         self.addCleanup(listener.close)
-        with mock.patch("agent_ntfy.PROBE_TIMEOUT", 0.3):
+        with mock.patch("ntfy_connector.PROBE_TIMEOUT", 0.3):
             code, out, err = run(["--home", str(home), "daemon", "--stop"])
         self.assertEqual((code, out), (1, Z("cli.status.no_socket", pid=4242) + "\n"))
 
@@ -932,7 +932,7 @@ class ConfirmSubTest(unittest.TestCase):
     # --stop 经 socket 的 stop 命令停 daemon，等它退干净；不再向 pid 发信号（三平台同一条路）
     def test_stop_goes_through_the_socket_not_a_signal(self):
         h = Harness(self)
-        with mock.patch.object(agent_ntfy.os, "kill", side_effect=AssertionError("must not signal")):
+        with mock.patch.object(ntfy_connector.os, "kill", side_effect=AssertionError("must not signal")):
             code, out, err = run(["--home", str(h.home), "daemon", "--stop"])
         self.assertEqual((code, err), (0, ""))
         self.assertEqual(out, Z("cli.stop.done", pid=os.getpid()) + "\n")
@@ -949,23 +949,23 @@ class HerdrHelpersTest(unittest.TestCase):
 
     def test_herdr_available_needs_env_and_a_working_cli(self):
         fake = FakeHerdr()
-        with mock.patch("agent_ntfy.herdr_run", fake):
+        with mock.patch("ntfy_connector.herdr_run", fake):
             with mock.patch.dict(os.environ, {"HERDR_ENV": "", "HERDR_PANE_ID": ""}):
-                self.assertFalse(agent_ntfy.herdr_available())
+                self.assertFalse(ntfy_connector.herdr_available())
             with mock.patch.dict(os.environ, {"HERDR_ENV": "1", "HERDR_PANE_ID": ""}):
-                self.assertFalse(agent_ntfy.herdr_available())
+                self.assertFalse(ntfy_connector.herdr_available())
             self.assertEqual(fake.calls, [])  # 环境变量不全就不去跑 herdr
             with mock.patch.dict(os.environ, HERDR):
-                self.assertTrue(agent_ntfy.herdr_available())
+                self.assertTrue(ntfy_connector.herdr_available())
                 self.assertEqual(fake.calls, [["herdr", "pane", "list"]])
                 fake.list_result = HerdrResult(rc=1, stdout="", stderr=herdr_error("pane:list", "server_not_running"))
-                self.assertFalse(agent_ntfy.herdr_available())
+                self.assertFalse(ntfy_connector.herdr_available())
 
     # 探活是静默的：没 daemon 就是 None，stderr 一个字都不打（away on 要拿它决定起不起 daemon，不是报错）
     def test_probe_is_silent_when_no_daemon(self):
         errbuf = io.StringIO()
         with contextlib.redirect_stderr(errbuf):
-            self.assertIsNone(agent_ntfy.probe(Path("/nonexistent/agent-ntfy-home")))
+            self.assertIsNone(ntfy_connector.probe(Path("/nonexistent/agent-ntfy-home")))
         self.assertEqual(errbuf.getvalue(), "")
 
     # daemon 已 bind 但还没进主循环（比如卡在初始化）：探活要在有限时间内放弃，不能让 away on 挂死
@@ -976,8 +976,8 @@ class HerdrHelpersTest(unittest.TestCase):
         self.addCleanup(cleanup)
         self.addCleanup(srv.close)
         started = time.monotonic()
-        with mock.patch("agent_ntfy.PROBE_TIMEOUT", 0.3):
-            self.assertIsNone(agent_ntfy.probe(home))
+        with mock.patch("ntfy_connector.PROBE_TIMEOUT", 0.3):
+            self.assertIsNone(ntfy_connector.probe(home))
         elapsed = time.monotonic() - started
         self.assertGreaterEqual(elapsed, 0.25)  # 真等到了监听端超时，不是连都没连上就返回（那样任何传输下都会「通过」）；留 50 ms 给 Windows 的定时器粒度（实测早醒 0.2 ms）
         self.assertLess(elapsed, 1.5)
@@ -991,8 +991,8 @@ class HerdrHelpersTest(unittest.TestCase):
         self.addCleanup(srv.close)
         errbuf = io.StringIO()
         started = time.monotonic()
-        with mock.patch("agent_ntfy.REQUEST_TIMEOUT", 0.3), contextlib.redirect_stderr(errbuf):
-            ev = agent_ntfy.request(home, {"cmd": "slots", "leased_by": "proj:/x", "pane": None}, "zh", not_sent=True)
+        with mock.patch("ntfy_connector.REQUEST_TIMEOUT", 0.3), contextlib.redirect_stderr(errbuf):
+            ev = ntfy_connector.request(home, {"cmd": "slots", "leased_by": "proj:/x", "pane": None}, "zh", not_sent=True)
         elapsed = time.monotonic() - started
         self.assertIsNone(ev)
         self.assertGreaterEqual(elapsed, 0.25)
@@ -1014,7 +1014,7 @@ class HerdrHelpersTest(unittest.TestCase):
         self.assertTrue(out.startswith("daemon：pid"), out)
         help_out = io.StringIO()
         with self.assertRaises(SystemExit) as cm, contextlib.redirect_stdout(help_out):
-            agent_ntfy.main(["--lang", "zh", "--help"])
+            ntfy_connector.main(["--lang", "zh", "--help"])
         self.assertEqual(cm.exception.code, 0)
         self.assertIn("文案语言", help_out.getvalue())  # 预扫的 --lang 决定 --help 的语言
         with self.assertRaises(SystemExit) as cm:
@@ -1043,10 +1043,10 @@ class HerdrHelpersTest(unittest.TestCase):
         self.assertTrue(out.startswith("daemon: pid"), out)
         with mock.patch.dict(os.environ, {"AGENT_NTFY_LANG": "", "LC_ALL": "", "LC_MESSAGES": "", "LANG": ""}), \
                 mock.patch("locale.getlocale", return_value=("Chinese (Simplified)_China", "936")):
-            self.assertEqual(agent_ntfy.resolve_lang(), "zh")  # Windows 常没有那三个变量：看 locale.getlocale()
+            self.assertEqual(ntfy_connector.resolve_lang(), "zh")  # Windows 常没有那三个变量：看 locale.getlocale()
         with mock.patch.dict(os.environ, {"AGENT_NTFY_LANG": "", "LC_ALL": "", "LC_MESSAGES": "", "LANG": ""}), \
                 mock.patch("locale.getlocale", return_value=(None, None)):
-            self.assertEqual(agent_ntfy.resolve_lang(), "en")
+            self.assertEqual(ntfy_connector.resolve_lang(), "en")
 
     def test_env_lang_beats_locale(self):
         h = Harness(self)
@@ -1056,7 +1056,7 @@ class HerdrHelpersTest(unittest.TestCase):
 
     def test_probe_returns_status_event(self):
         h = Harness(self)
-        ev = agent_ntfy.probe(h.home)
+        ev = ntfy_connector.probe(h.home)
         self.assertIsNotNone(ev)
         assert ev is not None
         self.assertEqual((ev["event"], ev["pid"]), ("status", os.getpid()))
@@ -1068,7 +1068,7 @@ class ConfirmSubPaneTest(unittest.TestCase):
     def test_non_tty_in_herdr_opens_pane_and_returns_0(self):
         h = Harness(self, subscribed=())
         fake = FakeHerdr()
-        with mock.patch("agent_ntfy.herdr_run", fake):
+        with mock.patch("ntfy_connector.herdr_run", fake):
             code, out, err = run(["--home", str(h.home), "confirm-sub", "slot4", "--again"], env=HERDR)
         self.assertEqual(code, 0, err)
         self.assertIn("wD:p7", out.splitlines()[0])  # 窗格 id 在首行，agent 一眼能取到
@@ -1079,7 +1079,7 @@ class ConfirmSubPaneTest(unittest.TestCase):
         self.assertEqual(split[split.index("--cwd") + 1], os.getcwd())
         self.assertEqual(ran[3], "wD:p7")
         argv = ti.split_pane_command(ran[4])
-        self.assertEqual(argv[:4], [sys.executable, os.path.abspath(agent_ntfy.__file__), "--lang", "zh"])  # 新窗格是新 shell，不继承调用方的语言：--lang 显式带上
+        self.assertEqual(argv[:4], [sys.executable, os.path.abspath(ntfy_connector.__file__), "--lang", "zh"])  # 新窗格是新 shell，不继承调用方的语言：--lang 显式带上
         self.assertEqual(argv[4:], ["--home", str(h.home), "confirm-sub", "slot4", "--close-pane", "--report-to", "wD:p1", "--again"])  # --home 在子命令前；自动开的窗格带 --close-pane 与 --report-to（开它的窗格）；--again 原样转进去
         # 本进程不碰 daemon：没发测试通知、没进确认中；topic 名不进本进程的输出
         self.assertEqual(h.client.published, [])
@@ -1091,7 +1091,7 @@ class ConfirmSubPaneTest(unittest.TestCase):
     def test_non_tty_unknown_slot_exits_1_without_opening_pane(self):
         h = Harness(self, subscribed=())
         fake = FakeHerdr()
-        with mock.patch("agent_ntfy.herdr_run", fake):
+        with mock.patch("ntfy_connector.herdr_run", fake):
             code, out, err = run(["--home", str(h.home), "confirm-sub", "slot9"], env=HERDR)
         self.assertEqual((code, out), (1, ""))
         self.assertIn("slot9", err)
@@ -1101,7 +1101,7 @@ class ConfirmSubPaneTest(unittest.TestCase):
     def test_non_tty_confirmed_slot_says_already_unless_again(self):
         h = Harness(self)  # 全部已过闸
         fake = FakeHerdr()
-        with mock.patch("agent_ntfy.herdr_run", fake):
+        with mock.patch("ntfy_connector.herdr_run", fake):
             code, out, err = run(["--home", str(h.home), "confirm-sub", "slot2"], env=HERDR)
             self.assertEqual(code, 0, err)
             self.assertEqual(out, Z("cli.confirm.already", slot="slot2") + "\n")
@@ -1114,7 +1114,7 @@ class ConfirmSubPaneTest(unittest.TestCase):
     # daemon 没跑 ⇒ 退 3（同现状），不开窗格
     def test_non_tty_without_daemon_exits_3(self):
         fake = FakeHerdr()
-        with mock.patch("agent_ntfy.herdr_run", fake):
+        with mock.patch("ntfy_connector.herdr_run", fake):
             code, out, err = run(["--home", "/nonexistent/agent-ntfy-home", "confirm-sub", "slot1"], env=HERDR)
         self.assertEqual((code, out), (3, ""))
         self.assertIn("daemon 没在跑", err)
@@ -1124,7 +1124,7 @@ class ConfirmSubPaneTest(unittest.TestCase):
     def test_non_tty_pane_command_carries_english_when_caller_is_english(self):
         h = Harness(self, subscribed=())
         fake = FakeHerdr()
-        with mock.patch("agent_ntfy.herdr_run", fake):
+        with mock.patch("ntfy_connector.herdr_run", fake):
             code, out, err = run(["--home", str(h.home), "confirm-sub", "slot4"], env={**HERDR, "AGENT_NTFY_LANG": "en"})
         self.assertEqual(code, 0, err)
         self.assertEqual(ti.split_pane_command(fake.calls[-1][4])[2:4], ["--lang", "en"], fake.calls[-1][4])
@@ -1134,7 +1134,7 @@ class ConfirmSubPaneTest(unittest.TestCase):
         h = Harness(self, subscribed=())
         fake = FakeHerdr()
         fake.list_result = HerdrResult(rc=1, stdout="", stderr=herdr_error("pane:list", "server_not_running"))
-        with mock.patch("agent_ntfy.herdr_run", fake):
+        with mock.patch("ntfy_connector.herdr_run", fake):
             code, out, err = run(["--home", str(h.home), "confirm-sub", "slot4"], env=HERDR)
         self.assertEqual((code, out), (4, ""))
         self.assertIn("agent-ntfy confirm-sub slot4", err)
@@ -1144,7 +1144,7 @@ class ConfirmSubPaneTest(unittest.TestCase):
         h = Harness(self, subscribed=())
         fake = FakeHerdr()
         fake.split_result = HerdrResult(rc=1, stdout="", stderr=herdr_error("pane:split", "pane_not_found"))
-        with mock.patch("agent_ntfy.herdr_run", fake):
+        with mock.patch("ntfy_connector.herdr_run", fake):
             code, out, err = run(["--home", str(h.home), "confirm-sub", "slot4"], env=HERDR)
         self.assertEqual((code, out), (4, ""))
         self.assertIn("agent-ntfy confirm-sub slot4", err)
@@ -1153,7 +1153,7 @@ class ConfirmSubPaneTest(unittest.TestCase):
         h = Harness(self, subscribed=())
         fake = FakeHerdr()
         fake.run_result = HerdrResult(rc=1, stdout="", stderr=herdr_error("pane:run", "pane_not_found"))
-        with mock.patch("agent_ntfy.herdr_run", fake):
+        with mock.patch("ntfy_connector.herdr_run", fake):
             code, out, err = run(["--home", str(h.home), "confirm-sub", "slot4"], env=HERDR)
         self.assertEqual((code, out), (4, ""))
         self.assertIn("agent-ntfy confirm-sub slot4", err)
@@ -1162,7 +1162,7 @@ class ConfirmSubPaneTest(unittest.TestCase):
     def test_show_topic_and_subscribed_paths_do_not_open_panes(self):
         h = Harness(self, subscribed=())
         fake = FakeHerdr()
-        with mock.patch("agent_ntfy.herdr_run", fake):
+        with mock.patch("ntfy_connector.herdr_run", fake):
             code, out, err = run(["--home", str(h.home), "confirm-sub", "slot4", "--show-topic"], env=HERDR)
             self.assertEqual(code, 0, err)
             self.assertIn(h.topic("slot4"), out)
@@ -1177,7 +1177,7 @@ class AwayOnTest(unittest.TestCase):
     def setUp(self):
         self.root = temp_root(self)
         self.fake = FakeHerdr()
-        patcher = mock.patch("agent_ntfy.herdr_run", self.fake)
+        patcher = mock.patch("ntfy_connector.herdr_run", self.fake)
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -1277,12 +1277,12 @@ class AwayOnTest(unittest.TestCase):
     def test_daemon_not_started_in_herdr_exits_3_without_writing(self):
         home = Path(tempfile.mkdtemp(prefix="home-")) / "home"
         self.addCleanup(shutil.rmtree, home.parent, ignore_errors=True)
-        with mock.patch("agent_ntfy.DAEMON_START_TIMEOUT", 0.3):
+        with mock.patch("ntfy_connector.DAEMON_START_TIMEOUT", 0.3):
             code, out, err = self.away_on(home)
         self.assertEqual((code, out), (3, ""))
         self.assertIn(Z("cli.away.daemon_failed", seconds="0.3", log=home / "daemon.log"), err)
         self.assertEqual([c[1:3] for c in self.fake.calls], [["pane", "list"], ["pane", "split"], ["pane", "run"]])
-        self.assertEqual(self.pane_commands()[0], [sys.executable, os.path.abspath(agent_ntfy.__file__), "--lang", "zh", "--home", str(home), "daemon"])
+        self.assertEqual(self.pane_commands()[0], [sys.executable, os.path.abspath(ntfy_connector.__file__), "--lang", "zh", "--home", str(home), "daemon"])
         self.assertFalse((self.root / projstate.DIR_NAME).exists())
 
     # 在 herdr 里但窗格开不出来：立刻退 3，不傻等探活超时
@@ -1291,7 +1291,7 @@ class AwayOnTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, home.parent, ignore_errors=True)
         self.fake.split_result = HerdrResult(rc=1, stdout="", stderr=herdr_error("pane:split", "pane_not_found"))
         started = time.monotonic()
-        with mock.patch("agent_ntfy.DAEMON_START_TIMEOUT", 3.0):
+        with mock.patch("ntfy_connector.DAEMON_START_TIMEOUT", 3.0):
             code, out, err = self.away_on(home)
         self.assertEqual((code, out), (3, ""))
         self.assertLess(time.monotonic() - started, 1.0)
@@ -1306,7 +1306,7 @@ class AwayOnTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, home.parent, ignore_errors=True)
         self.fake.run_result = HerdrResult(rc=1, stdout="", stderr=herdr_error("pane:run", "pane_not_found"))
         started = time.monotonic()
-        with mock.patch("agent_ntfy.DAEMON_START_TIMEOUT", 3.0):
+        with mock.patch("ntfy_connector.DAEMON_START_TIMEOUT", 3.0):
             code, out, err = self.away_on(home)
         self.assertEqual((code, out), (3, ""))
         self.assertLess(time.monotonic() - started, 1.0)
@@ -1321,7 +1321,7 @@ class AwayOnTest(unittest.TestCase):
         self.addCleanup(cleanup)
         self.addCleanup(srv.close)
         started = time.monotonic()
-        with mock.patch("agent_ntfy.DAEMON_START_TIMEOUT", 0.5), mock.patch("agent_ntfy.PROBE_TIMEOUT", 2.0):
+        with mock.patch("ntfy_connector.DAEMON_START_TIMEOUT", 0.5), mock.patch("ntfy_connector.PROBE_TIMEOUT", 2.0):
             code, out, err = self.away_on(home)
         self.assertEqual((code, out), (3, ""))
         self.assertLess(time.monotonic() - started, 1.5)
@@ -1332,7 +1332,7 @@ class AwayOnTest(unittest.TestCase):
         home = Path(tempfile.mkdtemp(prefix="home-")) / "home"
         self.addCleanup(shutil.rmtree, home.parent, ignore_errors=True)
         started = time.monotonic()
-        with mock.patch("agent_ntfy.DAEMON_START_TIMEOUT", 3.0), mock.patch("agent_ntfy._spawn_daemon", return_value=mock.Mock(poll=lambda: 7, pid=4242)):
+        with mock.patch("ntfy_connector.DAEMON_START_TIMEOUT", 3.0), mock.patch("ntfy_connector._spawn_daemon", return_value=mock.Mock(poll=lambda: 7, pid=4242)):
             code, out, err = self.away_on(home, env={})
         self.assertEqual((code, out), (3, ""))
         self.assertLess(time.monotonic() - started, 1.0)
@@ -1342,14 +1342,14 @@ class AwayOnTest(unittest.TestCase):
     # daemon 没跑、不在 herdr 里：脱离会话起（Popen），起来后照常走槽位保障
     def test_daemon_spawned_outside_herdr_then_ready(self):
         h = Harness(self)
-        real_probe, probes = agent_ntfy.probe, []
+        real_probe, probes = ntfy_connector.probe, []
 
         def probe_none_first(home, **kw):
             probes.append(home)
             return None if len(probes) == 1 else real_probe(home, **kw)
 
         spawned = []
-        with mock.patch("agent_ntfy.probe", probe_none_first), mock.patch("agent_ntfy._spawn_daemon", lambda home, lang: spawned.append((home, lang)) or mock.Mock(poll=lambda: None)):
+        with mock.patch("ntfy_connector.probe", probe_none_first), mock.patch("ntfy_connector._spawn_daemon", lambda home, lang: spawned.append((home, lang)) or mock.Mock(poll=lambda: None)):
             code, out, err = self.away_on(h.home, env={})
         self.assertEqual((code, err), (0, ""))
         self.assertEqual(spawned, [(h.home, "zh")])  # 脱离会话起的 daemon 也显式带语言
@@ -1381,7 +1381,7 @@ class AwayOnTest(unittest.TestCase):
     # 状态目录不可写：第一步就退 3，daemon 不起、herdr 不碰
     def test_unwritable_state_dir_exits_3_before_anything_starts(self):
         (self.root / projstate.DIR_NAME).write_text("not a dir", encoding="utf-8")
-        with mock.patch("agent_ntfy._spawn_daemon") as spawn:
+        with mock.patch("ntfy_connector._spawn_daemon") as spawn:
             code, out, err = self.away_on(Path("/nonexistent/agent-ntfy-home"))
         self.assertEqual((code, out), (3, ""))
         self.assertIn(Z("cli.away.io_failed", error="").rstrip(), err)

@@ -12,8 +12,8 @@ only: it renders your JSON into a fixed layout with a single button, pushes it t
 and returns whatever the human replies, verbatim. It never interprets content. A second command,
 `notify`, pushes a one-way progress note to the same phone and returns at once.
 
-Every command below is `scripts/agent_ntfy.py`, relative to this skill's directory
-(`python3 <skill dir>/scripts/agent_ntfy.py …`); the CLI calls itself `agent-ntfy` in its own messages,
+Every command below is `scripts/ntfy_connector.py`, relative to this skill's directory
+(`python3 <skill dir>/scripts/ntfy_connector.py …`); the CLI calls itself `agent-ntfy` in its own messages,
 and that always means this script. Python 3.10 or newer, standard library only; nothing to install.
 The shell forms in this file are POSIX (`$(…)`, quoted heredocs): on Windows run them from Git Bash
 (or WSL, where the skill simply runs as Linux); the Windows interpreter is `python`, as the test
@@ -31,7 +31,7 @@ Feed one JSON object on stdin through a quoted heredoc (the fields contain quote
 argv would mangle them). The call blocks until the human answers, the wait times out, or the channel fails.
 
 ```bash
-ANSWER=$(python3 <skill dir>/scripts/agent_ntfy.py ask <<'JSON'
+ANSWER=$(python3 <skill dir>/scripts/ntfy_connector.py ask <<'JSON'
 {
   "title":       "Keep or delete the scratch directory when no checkout exists",
   "doing":       "Letting the requirements assistant run before the project code is checked out",
@@ -107,7 +107,7 @@ Field-by-field guidance, the byte budget, and a worked bad/good pair: [reference
 Use it to report progress, a finished step, or anything the human should see but need not answer.
 
 ```bash
-python3 <skill dir>/scripts/agent_ntfy.py notify <<'JSON'
+python3 <skill dir>/scripts/ntfy_connector.py notify <<'JSON'
 {
   "title": "Tests green, starting the migration",
   "body":  "All tests pass on the three CI runners.\n\nNext: **schema migration** on the staging database (about 10 minutes). I will notify again when it is done.",
@@ -171,8 +171,8 @@ subagent**: it dies with you, and every message the human sends afterwards is lo
 - Inside herdr: `away on` (next section) starts it for you — and switches remote mode on, so use the
   by-hand form if you only need the daemon: split a pane
   (`herdr pane split --current --direction right --cwd "$PWD" --no-focus`) and run
-  `python3 <skill dir>/scripts/agent_ntfy.py daemon` in it (`herdr pane run <new pane id> "…"`).
-- Anywhere else (macOS, Linux, Windows): `python3 <skill dir>/scripts/agent_ntfy.py daemon --detach`
+  `python3 <skill dir>/scripts/ntfy_connector.py daemon` in it (`herdr pane run <new pane id> "…"`).
+- Anywhere else (macOS, Linux, Windows): `python3 <skill dir>/scripts/ntfy_connector.py daemon --detach`
   (a detached process: its own session on POSIX, a background process without a console window on
   Windows, by the `DETACHED_PROCESS` flag).
 - `daemon --status` prints one line ending in `transport: unix` or `transport: tcp`; `daemon --stop`
@@ -197,7 +197,7 @@ Whether to route decisions to the phone is the caller's policy (a rule in the us
 this skill). Enabling it is one command:
 
 ```bash
-python3 <skill dir>/scripts/agent_ntfy.py away on
+python3 <skill dir>/scripts/ntfy_connector.py away on
 ```
 
 It starts the daemon if needed (in a herdr pane when inside herdr, detached otherwise), makes sure a

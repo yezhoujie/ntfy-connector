@@ -5,7 +5,7 @@
 > users: copy this file into `~/.claude/rules/` (rules there are injected into every session). Other
 > agents: put it wherever your agent loads its standing instructions. Chinese version: `remote-mode-rule.zh-CN.md`.
 >
-> Below, `$AN` = `python3 <skill dir>/scripts/agent_ntfy.py`; with a global Claude Code install `<skill dir>` is
+> Below, `$AN` = `python3 <skill dir>/scripts/ntfy_connector.py`; with a global Claude Code install `<skill dir>` is
 > `~/.claude/skills/agent-ntfy`. How to write a question card is in SKILL.md.
 
 ## Where the state lives: `<project root>/.agent-ntfy/state.json` (written by the CLI; you only read it)
