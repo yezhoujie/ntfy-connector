@@ -3,7 +3,7 @@
 Every failure is loud: a non-zero exit plus a stderr line that says what happened **and whether the
 message was sent**. Never treat an empty stdout as "no answer yet": read `rc` first.
 
-`agent-ntfy` in the quoted stderr text is the CLI's own name for itself; on disk it is `scripts/ntfy_connector.py`.
+`ntfy-connector` in the quoted stderr text is the CLI's own name for itself; on disk it is `scripts/ntfy_connector.py`.
 
 ## Contents
 
@@ -25,7 +25,7 @@ message was sent**. Never treat an empty stdout as "no answer yet": read `rc` fi
 | 1 | input validation failed | **no** | empty |
 | 2 | `ask` only: no reply within the timeout | yes | empty |
 | 3 | channel failure: daemon not running / connection lost / publish failed | stderr says which | empty |
-| 4 | needs a human on the terminal side: unconfirmed slot / no usable slot / this project already waiting | no | empty |
+| 4 | needs a human on the terminal side: unconfirmed slot / no usable slot / this project already waiting / a 0.1.x daemon is still listening (any subcommand, first run after upgrading) | no | empty |
 | 130 | Ctrl-C (handled, with the sent / not-sent note, for `ask` only) | stderr says which | empty |
 
 Codes 2, 3, 4 and 130 are distinct on purpose: the right next step differs for each. `notify` never
@@ -36,7 +36,7 @@ returns 2 (it does not wait) and treats every other code as `ask` does.
 All problems are reported in one run; fix them all before calling again. Nothing was sent.
 
 ```
-agent-ntfy ask: input validation failed (7 issue(s)); fix them all and retry. Message NOT sent.
+ntfy-connector ask: input validation failed (7 issue(s)); fix them all and retry. Message NOT sent.
 
   description: missing. Required: the background, written for someone who has not seen any of the work
   blocker    : missing. Required: exactly what is blocked
@@ -56,10 +56,10 @@ Other lines you may see, and the fix:
 | `options    : item 2 lacks consequence. Each item needs id / label / consequence, all non-empty` / `duplicate id: keep (items 1, 3)` | every option needs non-empty `id`, `label`, `consequence`; ids unique |
 | `options    : 6 items; 2-5 required …` | merge or drop options; more than 5 means the question has not converged |
 | `JSON       : not valid JSON: Illegal trailing comma before end of object (line 1, column 14)` | the heredoc is not valid JSON; check quotes and commas |
-| `agent-ntfy: NTFY_CONNECTOR_LANG=xx is not a valid choice (only zh / en) …` (also rc 1, printed before any subcommand runs) | fix or unset the environment variable |
-| `agent-ntfy: NTFY_CONNECTOR_IPC='xx' is not a valid choice (only unix / tcp); set one of them or unset it (platform default)` (rc 1, before any subcommand runs; `unix` on Windows is rejected the same way) | fix or unset the environment variable |
+| `ntfy-connector: NTFY_CONNECTOR_LANG=xx is not a valid choice (only zh / en) …` (also rc 1, printed before any subcommand runs) | fix or unset the environment variable |
+| `ntfy-connector: NTFY_CONNECTOR_IPC='xx' is not a valid choice (only unix / tcp); set one of them or unset it (platform default)` (rc 1, before any subcommand runs; `unix` on Windows is rejected the same way) | fix or unset the environment variable |
 
-The same report for `notify` starts with `agent-ntfy notify: input validation failed (N issue(s)); …`
+The same report for `notify` starts with `ntfy-connector notify: input validation failed (N issue(s)); …`
 and knows two fields: `title      : an empty string. Required: the one-line hook shown in the notification shade — the preview shows nothing else`,
 `body       : an empty string. Required: the notification body; Markdown allowed (bold / lists / rules)`;
 an over-long body reads `body       : renders to N bytes, limit 4096, M bytes over. Trim body (nothing is truncated for you)`.
@@ -69,7 +69,7 @@ The report is in the language selected by the JSON `lang` (if valid), else the p
 ## 3. rc 2: timeout
 
 ```
-agent-ntfy: no reply within 43200 s (the message was sent; the user's later reply will be delivered as an instruction)
+ntfy-connector: no reply within 43200 s (the message was sent; the user's later reply will be delivered as an instruction)
 ```
 
 The card on the phone is replaced by `⌛ Timed out · …` without a button (with a `--timeout` under
@@ -91,10 +91,10 @@ Read the parenthesis: it tells you whether the message went out.
 **Daemon not running** (not sent):
 
 ```
-agent-ntfy: can't connect to the daemon (<home>/daemon.sock: No such file or directory). Message NOT sent.
+ntfy-connector: can't connect to the daemon (<home>/daemon.sock: No such file or directory). Message NOT sent.
 The daemon is not running. Start it:
-  inside herdr : open another pane and run  agent-ntfy daemon      (visible, herdr owns its lifetime)
-  outside herdr: agent-ntfy daemon --detach                     (detached; manage with --status / --stop)
+  inside herdr : open another pane and run  ntfy-connector daemon      (visible, herdr owns its lifetime)
+  outside herdr: ntfy-connector daemon --detach                     (detached; manage with --status / --stop)
   ⚠️ don't start it from the agent's own shell or as its background task — it dies with the agent
 ```
 
@@ -102,15 +102,15 @@ With the tcp transport (the default on Windows) the path in the parenthesis is `
 Start the daemon as described in [daemon.md](daemon.md), then call again. (`AF_UNIX path too long` in
 place of `No such file or directory` means `NTFY_CONNECTOR_HOME` is too deep for a Unix socket; see daemon.md §3.)
 
-**Publish failed** (not sent): `agent-ntfy: message NOT sent: publishing to ntfy failed: <reason>`. The reason is an HTTP status, a connection error, or `This is rate limiting, not a code error` (ntfy.sh allows about 250 messages per day per source IP). Report it to the user; retrying immediately rarely helps.
+**Publish failed** (not sent): `ntfy-connector: message NOT sent: publishing to ntfy failed: <reason>`. The reason is an HTTP status, a connection error, or `This is rate limiting, not a code error` (ntfy.sh allows about 250 messages per day per source IP). Report it to the user; retrying immediately rarely helps.
 
-**Daemon stopped while you were waiting** (sent): `agent-ntfy: message sent, but the daemon is stopping; the question went out, the user's later reply will be delivered as an instruction`. Same handling as a timeout once the daemon is back.
+**Daemon stopped while you were waiting** (sent): `ntfy-connector: message sent, but the daemon is stopping; the question went out, the user's later reply will be delivered as an instruction`. Same handling as a timeout once the daemon is back.
 
-**Connection lost** — `agent-ntfy: connection to the daemon lost (message sent; the reply can no longer reach this call)` or `… (message NOT sent)`; `agent-ntfy: talking to the daemon failed: <error> (message sent)` — restart or check the daemon (`daemon --status`), then follow the sent / not-sent hint.
+**Connection lost** — `ntfy-connector: connection to the daemon lost (message sent; the reply can no longer reach this call)` or `… (message NOT sent)`; `ntfy-connector: talking to the daemon failed: <error> (message sent)` — restart or check the daemon (`daemon --status`), then follow the sent / not-sent hint.
 
-**Daemon accepted the connection but never answered** (not sent): `agent-ntfy: talking to the daemon failed: no response from the daemon (message NOT sent)` — one-shot commands (`notify`, `slots`, `release`, `add-slot`, `daemon --status|--stop`) give up after 60 s (`REQUEST_TIMEOUT`, longer than the daemon's 30 s publish limit) instead of hanging; the daemon is stuck outside its main loop — check `daemon --status`, restart it if that hangs too. `ask` and `confirm-sub` are not subject to this limit (they wait for a human).
+**Daemon accepted the connection but never answered** (not sent): `ntfy-connector: talking to the daemon failed: no response from the daemon (message NOT sent)` — one-shot commands (`notify`, `slots`, `release`, `add-slot`, `daemon --status|--stop`) give up after 60 s (`REQUEST_TIMEOUT`, longer than the daemon's 30 s publish limit) instead of hanging; the daemon is stuck outside its main loop — check `daemon --status`, restart it if that hangs too. `ask` and `confirm-sub` are not subject to this limit (they wait for a human).
 
-**Rejected by the daemon** (not sent): `agent-ntfy: message NOT sent: unauthenticated connection (token mismatch)` — tcp transport only: the token the client sent is not the running daemon's (`daemon.port` was rewritten after the client read it, or edited); run `daemon --status` and call again. A daemon that cannot read its own state answers `… NOT sent: <storage error>` (§9).
+**Rejected by the daemon** (not sent): `ntfy-connector: message NOT sent: unauthenticated connection (token mismatch)` — tcp transport only: the token the client sent is not the running daemon's (`daemon.port` was rewritten after the client read it, or edited); run `daemon --status` and call again. A daemon that cannot read its own state answers `… NOT sent: <storage error>` (§9).
 
 ## 5. rc 4: a human must act on the terminal side
 
@@ -119,7 +119,7 @@ The channel never asks the human anything itself (stdout is captured, so a promp
 **Slot not confirmed** (first use of a slot on this machine, or a newly added one):
 
 ```
-agent-ntfy: message NOT sent: Slot slot1 has not been confirmed to reach the phone yet. Ask the user to run agent-ntfy confirm-sub slot1 in their own terminal, subscribe and tap the button as prompted, then retry
+ntfy-connector: message NOT sent: Slot slot1 has not been confirmed to reach the phone yet. Ask the user to run ntfy-connector confirm-sub slot1 in their own terminal, subscribe and tap the button as prompted, then retry
 ```
 
 Inside herdr you can do more than relay: run `confirm-sub slot1` yourself; it opens a pane for the user and tells you the three steps to relay (daemon.md §5). Outside herdr, tell the user: run `python3 <skill dir>/scripts/ntfy_connector.py confirm-sub slot1` in their own terminal (it prints the topic name, which must not pass through your output), subscribe in the ntfy app, press Enter, and tap the button on the test notification. If the user says they already subscribed that topic, you may run `confirm-sub slot1 --subscribed` yourself (no topic is printed); it still needs the tap on the phone. If the test notification never pops up, the phone's notification settings are the problem; the skill's README (for humans) has the checklist.
@@ -127,29 +127,46 @@ Inside herdr you can do more than relay: run `confirm-sub slot1` yourself; it op
 **All slots leased**:
 
 ```
-agent-ntfy: message NOT sent: All 5 slots are leased; occupancy below. Tell the user and let them decide: turn remote mode off in one of those projects (which releases its slot), or add a slot (agent-ntfy add-slot, then away on). Never release another project's lease for it
-agent-ntfy:   slot1: proj:/Users/me/work/api (idle)
-agent-ntfy:   slot2: proj:/Users/me/work/web (question pending)
-agent-ntfy:   slot3: proj:/Users/me/work/cli (idle, unconfirmed)
+ntfy-connector: message NOT sent: All 5 slots are leased; occupancy below. Tell the user and let them decide: turn remote mode off in one of those projects (which releases its slot), or add a slot (ntfy-connector add-slot, then away on). Never release another project's lease for it
+ntfy-connector:   slot1: proj:/Users/me/work/api (idle)
+ntfy-connector:   slot2: proj:/Users/me/work/web (question pending)
+ntfy-connector:   slot3: proj:/Users/me/work/cli (idle, unconfirmed)
 …
 ```
 
 This is the normal state once the pool has been in use for a while (leases never expire). Show the user the occupancy and let them decide: they turn remote mode off in one of those projects themselves (its `away off` releases the slot), or you `add-slot` and retry (`away on`, or `confirm-sub` for the new slot). A lease is exclusive — "idle" only means no question is pending right now, not that the project is done with it — so **never release another project's slot**: `release <slot>` on one refuses with `slot slotN is leased by proj:…, not by this project; …` (rc 4). Leases from a project whose directory no longer exists can be released by running `release <slot>` with `NTFY_CONNECTOR_TARGET=<that holder>` set.
 
-**No confirmed slot while remote mode is on** (`away: true` in the project's state file): `agent-ntfy: message NOT sent: In remote mode only confirmed slots can be used, and every confirmed slot is leased; occupancy below. Wait for the user to return and decide: turn remote mode off in one of those projects, or add a slot and confirm it (agent-ntfy add-slot, then confirm-sub)`, followed by the same occupancy lines. Free but unconfirmed slots are not taken automatically, because nobody is at the keyboard to confirm them; both ways out need the human.
+**No confirmed slot while remote mode is on** (`away: true` in the project's state file): `ntfy-connector: message NOT sent: In remote mode only confirmed slots can be used, and every confirmed slot is leased; occupancy below. Wait for the user to return and decide: turn remote mode off in one of those projects, or add a slot and confirm it (ntfy-connector add-slot, then confirm-sub)`, followed by the same occupancy lines. Free but unconfirmed slots are not taken automatically, because nobody is at the keyboard to confirm them; both ways out need the human.
 
-**Busy**: `agent-ntfy: message NOT sent: this target already has a question waiting on slot1; wait for it to finish` — another `ask` from the same project is still blocking (`notify` is not affected and may be sent meanwhile). `slot slot1 is in the middle of a reachability check; retry once it finishes` — a `confirm-sub` is running on that slot.
+**Busy**: `ntfy-connector: message NOT sent: this target already has a question waiting on slot1; wait for it to finish` — another `ask` from the same project is still blocking (`notify` is not affected and may be sent meanwhile). `slot slot1 is in the middle of a reachability check; retry once it finishes` — a `confirm-sub` is running on that slot.
+
+**Old daemon still listening** (first run after upgrading from agent-ntfy 0.1.x; any subcommand except `--help`, not only `ask` / `notify`):
+
+```
+ntfy-connector: the old agent-ntfy daemon is still listening in /Users/me/.agent-ntfy; stop it with the old CLI's daemon --stop and retry (the next command then moves the old directory to its new place)
+```
+
+Nothing was migrated and nothing was sent: the old daemon still holds the topic subscriptions and the leases, so the new files must not take over while it runs. Tell the user to stop it with the **old** CLI — `python3 <old skill dir>/scripts/agent_ntfy.py daemon --stop`, or `kill -TERM <pid>` with the pid from `~/.agent-ntfy/daemon.pid` if the old files are already gone — then call again: that run migrates and prints the lines described in §7 before doing its own work. The upgrade checklist for the user is README §12.1.
 
 ## 6. rc 130: interrupted
 
-`agent-ntfy: interrupted (message sent; the user's later reply will be delivered as an instruction)` or `… (message NOT sent)`. Only the `ask` client was interrupted; the daemon is unaffected — **do not restart it** (130 is a separate code precisely so this is not mistaken for rc 3). If stderr says the message was sent, the card becomes `⚠️ Cancelled · …` and a late reply still reaches you as an instruction: handle it like rc 2. If it says NOT sent, simply call `ask` again.
+`ntfy-connector: interrupted (message sent; the user's later reply will be delivered as an instruction)` or `… (message NOT sent)`. Only the `ask` client was interrupted; the daemon is unaffected — **do not restart it** (130 is a separate code precisely so this is not mistaken for rc 3). If stderr says the message was sent, the card becomes `⚠️ Cancelled · …` and a late reply still reaches you as an instruction: handle it like rc 2. If it says NOT sent, simply call `ask` again.
 
 ## 7. Warnings while waiting
 
-Lines starting `agent-ntfy: note:` on stderr while `ask` blocks are informational; the call keeps waiting:
+Lines starting `ntfy-connector: note:` on stderr while `ask` blocks are informational; the call keeps waiting:
 
 - `the ntfy subscription is down (N consecutive failures, S s) and still reconnecting; replies arriving meanwhile will be replayed once it recovers` / `the ntfy subscription is back`
 - `the ntfy subscription is currently down and reconnecting; the question went out, the reply will be replayed once it recovers`
+
+**First run after upgrading from agent-ntfy 0.1.x**: any subcommand, whatever its exit code (rc 0 included), first prints one `ntfy-connector: …` line per migration step on stderr, before its own output. They are not failures; relay them and carry on:
+
+- `moved the old user directory <old> to <new> (topic pool / leases / log carried over as they were; the phone subscriptions stay valid)`
+- `moved the old topic-pool keychain item (service AGENT_NTFY_TOPICS) to the new item (service NTFY_CONNECTOR_TOPICS); the old item was deleted` (macOS only)
+- `renamed the project state directory <old> to <new>`
+- `old environment variables found: AGENT_NTFY_HOME → NTFY_CONNECTOR_HOME. This version does not read them (their values were not looked at); to keep them, set them again under the new names` — repeats on every run until the user renames the variables (README §12.1 has the table); relay it once.
+
+A line ending in `… both exist; the old one was left untouched: …` or `… failed (…); the old one was left untouched …` means that step was skipped and the user decides what to do with the old copy; relay it. Like every other stderr line, these follow the process language (`--lang`, else `NTFY_CONNECTOR_LANG`, else the system locale, else English).
 
 ## 8. Other subcommands
 
@@ -166,6 +183,8 @@ Lines starting `agent-ntfy: note:` on stderr while `ask` blocks are informationa
 | `daemon --stop` | `daemon: pid N stopped`; also when nothing was running and no pid file exists (`daemon: not running`) | stale pid file but no answer; `did not acknowledge the stop`; `did not exit within 30 s` | – | – | – | – |
 | `daemon --detach` | started, pid printed | – | – | already running; child exited (`exit code N, see <log>`); not ready within 5 s | – | – |
 | `daemon` (foreground) | clean shutdown | – | – | could not start: endpoint in use / cannot listen / storage error (§9), one line on stderr | – | – |
+
+Every row can also exit 4 with the old-daemon line of §5 on the first run after upgrading from 0.1.x, and on that run every row's stderr starts with the migration lines of §7.
 
 `confirm-sub --show-topic <slot>` prints the topic name and exits 0 without sending anything; the name lands in your output, so only use it when the user asked for that.
 

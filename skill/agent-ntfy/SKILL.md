@@ -1,6 +1,6 @@
 ---
 name: agent-ntfy
-description: Pushes a decision that needs a human to their phone via ntfy.sh and blocks until the verdict comes back on stdout; messages the human sends from the phone arrive in the agent session as instructions. For choices the agent cannot settle on its own (unaligned requirements, a real disagreement, a technology choice) while the human may be away from the keyboard. When to ask is the caller's policy — this skill provides the call, not the trigger. It can also push one-way notifications (notify) to the same phone.
+description: Pushes a decision that needs a human to their phone via ntfy.sh and blocks until the verdict comes back on stdout; messages the human sends from the phone arrive in the agent session as instructions. For choices the agent cannot settle on its own (unaligned requirements, a real disagreement, a technology choice) while the human may be away from the keyboard. When to ask is the caller's policy — this skill provides the call, not the trigger. It can also push one-way notifications (notify) to the same phone. The CLI it drives is ntfy-connector, shipped as scripts/ntfy_connector.py in this skill.
 license: MIT
 compatibility: "Python >= 3.10, standard library only. Needs ntfy.sh (or a self-hosted ntfy) reachable. Phone -> agent injection needs herdr. Linux/Windows: not end-to-end tested."
 ---
@@ -13,7 +13,7 @@ and returns whatever the human replies, verbatim. It never interprets content. A
 `notify`, pushes a one-way progress note to the same phone and returns at once.
 
 Every command below is `scripts/ntfy_connector.py`, relative to this skill's directory
-(`python3 <skill dir>/scripts/ntfy_connector.py …`); the CLI calls itself `agent-ntfy` in its own messages,
+(`python3 <skill dir>/scripts/ntfy_connector.py …`); the CLI calls itself `ntfy-connector` in its own messages,
 and that always means this script. Python 3.10 or newer, standard library only; nothing to install.
 The shell forms in this file are POSIX (`$(…)`, quoted heredocs): on Windows run them from Git Bash
 (or WSL, where the skill simply runs as Linux); the Windows interpreter is `python`, as the test
@@ -218,7 +218,7 @@ to the user**; the outcomes are:
   earlier run is still open; the user finishes there.
 - rc 3 (daemon did not come up, or no herdr pane could be opened) or rc 4 (outside herdr and the slot is
   unconfirmed, so the user must run `confirm-sub <slot>` in their own terminal — relay that; when their run
-  finishes it prints one line for them to send back to you, `agent-ntfy: slotN is confirmed; …`, because
+  finishes it prints one line for them to send back to you, `ntfy-connector: slotN is confirmed; …`, because
   without herdr nothing reaches you by itself; or every slot is leased: stderr `All N slots are leased;
   occupancy below. …` with one line per slot — who holds it, idle or question pending, confirmed or not) with
   the reason on stderr: remote mode is **not** enabled and nothing is written. When every slot is leased,

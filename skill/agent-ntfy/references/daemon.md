@@ -1,6 +1,6 @@
 # The daemon, slots, and environment
 
-`agent-ntfy` below means `python3 <skill dir>/scripts/ntfy_connector.py` (on Windows the interpreter is `python`, as the test workflow runs it).
+`ntfy-connector` below means `python3 <skill dir>/scripts/ntfy_connector.py` (on Windows the interpreter is `python`, as the test workflow runs it).
 
 ## Contents
 
@@ -32,25 +32,25 @@ for the user. The only rule: **it must outlive you.**
 
 | where you are | do this |
 |---|---|
-| inside herdr (exercised on macOS; the pane command is a POSIX `env …` line, not tried on Windows) | `agent-ntfy away on` starts it in a new pane for you — and switches remote mode on (SKILL.md, "Remote mode"). By hand: `herdr pane split --current --direction right --cwd "$PWD" --no-focus` returns the new pane id (`.result.pane.pane_id`); then `herdr pane run <pane id> "python3 <skill dir>/scripts/ntfy_connector.py daemon"`. Visible, and herdr owns its lifetime |
-| macOS / Linux, outside herdr | `agent-ntfy daemon --detach`: starts the daemon in its own session, prints `daemon: started in the background, pid N (log <home>/daemon.log)` once the endpoint answers |
-| Windows, outside herdr | `agent-ntfy daemon --detach`: starts it as a detached background process (no console window, by the `DETACHED_PROCESS` flag); same output. Run it from Git Bash like every other command in these docs (under WSL the skill runs as Linux) |
+| inside herdr (exercised on macOS; the pane command is a POSIX `env …` line, not tried on Windows) | `ntfy-connector away on` starts it in a new pane for you — and switches remote mode on (SKILL.md, "Remote mode"). By hand: `herdr pane split --current --direction right --cwd "$PWD" --no-focus` returns the new pane id (`.result.pane.pane_id`); then `herdr pane run <pane id> "python3 <skill dir>/scripts/ntfy_connector.py daemon"`. Visible, and herdr owns its lifetime |
+| macOS / Linux, outside herdr | `ntfy-connector daemon --detach`: starts the daemon in its own session, prints `daemon: started in the background, pid N (log <home>/daemon.log)` once the endpoint answers |
+| Windows, outside herdr | `ntfy-connector daemon --detach`: starts it as a detached background process (no console window, by the `DETACHED_PROCESS` flag); same output. Run it from Git Bash like every other command in these docs (under WSL the skill runs as Linux) |
 
 **Never** start it as a background job of your own shell, under a Monitor, in a subagent, or with `&`
 in a tool call: those die with your session, and every message the human sends afterwards is lost
 without any error on their side.
 
 A second start is refused (`a daemon is already running`, rc 3); check with `--status` first. If
-`--detach` reports `daemon (pid N) not ready within 5 s, still starting; check later with agent-ntfy daemon --status, log <home>/daemon.log`
+`--detach` reports `daemon (pid N) not ready within 5 s, still starting; check later with ntfy-connector daemon --status, log <home>/daemon.log`
 (rc 3), the process is up but its endpoint did not answer in time: read the log, then `--status`. A
 child that exited immediately is reported as `the daemon did not come up (exit code N), see <log>` (rc 3).
 
 ## 3. Status, stop, lifecycle
 
 ```
-agent-ntfy daemon --status    # rc 0 + one line:  daemon: pid N  subscription: connected  pending questions: 0  confirming: 0  slots: 5  transport: unix
+ntfy-connector daemon --status    # rc 0 + one line:  daemon: pid N  subscription: connected  pending questions: 0  confirming: 0  slots: 5  transport: unix
                               # rc 1: "daemon: not running", or "daemon: no answer (pid file N still there; it may have died)"
-agent-ntfy daemon --stop      # asks the daemon over the endpoint to shut down, then waits up to 30 s for its files to go; rc 0 "daemon: pid N stopped"
+ntfy-connector daemon --stop      # asks the daemon over the endpoint to shut down, then waits up to 30 s for its files to go; rc 0 "daemon: pid N stopped"
 ```
 
 - `--status` is a probe over the endpoint; `transport:` is `unix` or `tcp`. A pid file with no answer
@@ -121,7 +121,7 @@ unconfirmed idle one, which it then sends through the reachability check) — th
 settled while the human is still at the keyboard. Outside remote mode `ask` and `notify` take a free slot
 automatically when the project holds none; **with remote mode on they only use confirmed slots** (`away:
 true` in the state file). Leases have **no TTL and are never reclaimed**; release yours when your task ends
-(`agent-ntfy release` with no argument releases the slot leased by the current project; `away off` does the
+(`ntfy-connector release` with no argument releases the slot leased by the current project; `away off` does the
 same). A lease is exclusive and belongs to its project until that project releases it: `release <slot>`
 carries the caller's project identity and refuses another project's slot (`not_yours`, rc 4) — one session
 never ends another's remote mode. Once no usable slot is free, `ask` / `notify` / `away on` exit 4 with the
@@ -130,9 +130,9 @@ occupancy (holder, idle or question pending, confirmed or not, one line per slot
 projects and `add-slot`; that is the normal steady state, not an error to hide.
 
 ```
-agent-ntfy slots              # one line per slot: name, state, confirmed / unconfirmed, then "<holder>  since <time>" and "pane <id>" when leased
-agent-ntfy release [<slot>]   # rc 0 "released slotN"; refuses an active slot (rc 3) and another project's slot (rc 4)
-agent-ntfy add-slot           # rc 0 "added slot6 (not yet confirmed to reach the phone). Next: run  agent-ntfy confirm-sub slot6  in your own terminal"
+ntfy-connector slots              # one line per slot: name, state, confirmed / unconfirmed, then "<holder>  since <time>" and "pane <id>" when leased
+ntfy-connector release [<slot>]   # rc 0 "released slotN"; refuses an active slot (rc 3) and another project's slot (rc 4)
+ntfy-connector add-slot           # rc 0 "added slot6 (not yet confirmed to reach the phone). Next: run  ntfy-connector confirm-sub slot6  in your own terminal"
 ```
 
 After upgrading from a version whose lease holder was the pane id: `slots` shows those old leases with a
@@ -152,12 +152,12 @@ test notification** for that slot. The result is stored; the slot is not asked a
 Default form, run by the user in their own terminal (stdout must be a TTY):
 
 ```
-agent-ntfy confirm-sub slot1
+ntfy-connector confirm-sub slot1
 topic for slot1: <topic name>
 subscribe URL: https://ntfy.sh/<topic name>
 Subscribe to the topic above in the ntfy app on your phone. Once subscribed, press Enter and I'll send a test notification with a button — when it pops up, tap the button and the check is done.
 Press Enter once subscribed…
-agent-ntfy: test notification sent — tap “Got it” in the phone's notification shade (within 600 s)…
+ntfy-connector: test notification sent — tap “Got it” in the phone's notification shade (within 600 s)…
 ✅ slot1 confirmed: the phone gets notifications; the agent can use it for questions from now on
 ```
 
@@ -186,7 +186,7 @@ agent-ntfy: test notification sent — tap “Got it” in the phone's notificat
   pane by hand *before* pressing Enter and tapping the button cancels the check (the daemon sees the
   connection drop).
 - Run by hand in a terminal (no `--report-to`), a successful `confirm-sub` ends with `You can close this
-  terminal window now. Back in your agent's session, send it this line: agent-ntfy: slotN is confirmed; …` —
+  terminal window now. Back in your agent's session, send it this line: ntfy-connector: slotN is confirmed; …` —
   the only way the result reaches an agent without herdr.
 
 ## 6. Messages from the phone when no question is pending
@@ -201,8 +201,9 @@ A claude target gets the prompt only. Claude Code passes queued text to the mode
 it is running finishes, so the wait is at most one tool call; its *send-now* key (`ctrl+enter`, Claude
 Code ≥ 2.1.276) would deliver at once but **interrupts the current turn** — cancelling the running tool
 call — so the daemon never presses it, and does not offer a way to ask for it either: that would cost one
-more notification per message against ntfy.sh's daily quota (`NTFY_CONNECTOR_URL`, §7). (agent-lark lets the
-human ask for it with a reaction on their own message.)
+more notification per message against ntfy.sh's daily quota (`NTFY_CONNECTOR_URL`, §7). The sibling
+lark-connector (skill `agent-lark`, https://github.com/yezhoujie/lark-connector) lets the human ask for it
+with a reaction on their own message.
 
 If there is no lease, the lease has no pane (its commands were never run from inside herdr), the pane is
 gone, or herdr is not available, the human gets a receipt on the phone (`[slotN] Message not delivered`)
@@ -223,7 +224,7 @@ Same variables as README §9 (plus `NTFY_CONNECTOR_OFFLINE`), kept here so the a
 | `NTFY_CONNECTOR_IPC` | `unix` on POSIX, `tcp` on Windows | how clients reach the daemon: `unix` (socket file `daemon.sock`) or `tcp` (loopback port + token in `daemon.port`). Read when the daemon starts and by every client; `unix` on Windows and any other value exit 1 (`NTFY_CONNECTOR_IPC=… is not a valid choice (only unix / tcp)`) |
 | `NTFY_CONNECTOR_STORE` | `keychain` on macOS, `dpapi` on Windows, `file` elsewhere | where the topic pool lives (read by the daemon only): `keychain` = macOS keychain item, authorised per application; `file` = `<home>/topics.json`, mode 0600; `dpapi` = `<home>/topics.dpapi`, encrypted for the current Windows user on this machine. `file` and `dpapi` are readable by every process of the same user account — wider than the keychain. Any other value exits with `NTFY_CONNECTOR_STORE=… is not a valid choice (only keychain / file / dpapi)` |
 | `NTFY_CONNECTOR_KEYCHAIN` | `NTFY_CONNECTOR_TOPICS` | keychain service name holding the topic pool (`keychain` store only) |
-| `NTFY_CONNECTOR_TOPIC_PREFIX` | `agent-ntfy` | prefix of newly generated topic names (`<prefix>-<20 random chars>`); letters, digits, `-`, `_`, max 40 |
+| `NTFY_CONNECTOR_TOPIC_PREFIX` | `ntfy-connector` | prefix of newly generated topic names (`<prefix>-<20 random chars>`); letters, digits, `-`, `_`, max 40 |
 | `NTFY_CONNECTOR_OFFLINE` | – | **test suite only**: `1` skips the tests that talk to the real ntfy.sh. Nothing in `scripts/` reads it |
 | `HERDR_ENV`, `HERDR_PANE_ID` | set by herdr | detected, not configured: inside herdr the pane id is recorded on the lease as the injection target |
 
