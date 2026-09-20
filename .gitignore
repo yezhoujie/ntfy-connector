@@ -10,7 +10,7 @@ CLAUDE.md
 # 只在本机保留，不入仓
 task/
 
-# agent-ntfy 远程交互模式的项目级运行时状态
+# ntfy-connector 远程交互模式的项目级运行时状态
 .ntfy-connector/
 
 # 编辑器本地配置
