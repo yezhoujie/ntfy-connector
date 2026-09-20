@@ -113,6 +113,47 @@ class _IpcCases:
         assert result is not None
         self.assertEqual(result.get("pid"), 123)
 
+    def test_probe_any_finds_the_listener_whatever_the_env_says(self) -> None:
+        # 另一个进程按它自己的传输配置起的 daemon：本进程的 NTFY_CONNECTOR_IPC 说什么都不该影响探不探得到
+        assert isinstance(self, unittest.TestCase)
+        listener, cleanup = ipc.listen(self.home)
+        self.addCleanup(cleanup)
+        listener.setblocking(True)
+        self.addCleanup(listener.close)
+
+        def fake_daemon() -> None:
+            conn, _addr = listener.accept()
+            with conn:
+                buf = b""
+                while b"\n" not in buf:
+                    chunk = conn.recv(4096)
+                    if not chunk:
+                        return
+                    buf += chunk
+                conn.sendall(b'{"event":"status","pid":123}\n')
+
+        other = "tcp" if self.transport == "unix" else "unix"
+        t = threading.Thread(target=fake_daemon, daemon=True)
+        t.start()
+        try:
+            with mock.patch.dict(os.environ, {ipc.ENV_VAR: other}):
+                if other == "tcp" or ipc.AF_UNIX is not None:  # Windows 上 unix 会被 transport() 拒绝，那条路探不了
+                    self.assertIsNone(ipc.probe(self.home))  # 按环境变量那种传输探不到
+                result = ipc.probe_any(self.home)
+        finally:
+            t.join(timeout=2)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.get("pid"), 123)
+
+    def test_probe_any_ignores_stale_endpoint_files(self) -> None:
+        assert isinstance(self, unittest.TestCase)
+        self.assertIsNone(ipc.probe_any(self.home))  # 什么文件都没有
+        ipc.port_path(self.home).write_text("1\nnobody\n", encoding="utf-8")  # 没人听的端口
+        if ipc.AF_UNIX is not None:
+            ipc.sock_path(self.home).write_text("", encoding="utf-8")  # 残骸：不是 socket
+        self.assertIsNone(ipc.probe_any(self.home))
+
     def test_probe_returns_none_on_non_status_event(self) -> None:
         assert isinstance(self, unittest.TestCase)
         listener, cleanup = ipc.listen(self.home)

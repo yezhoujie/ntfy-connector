@@ -348,6 +348,17 @@ class KeychainStoreTest(unittest.TestCase):
                 self.assertIn("NTFY_CONNECTOR_STORE=file", str(cm.exception))
                 self.assertIn("security", str(cm.exception))
 
+    # 删条目：不存在（44）与删成功同义；别的非零退出码要响亮报，不能让「以为删了」的旧条目继续留在钥匙串里
+    def test_delete_treats_missing_as_done_and_fails_loudly_otherwise(self):
+        for rc in (0, 44):
+            run = FakeRun(**{"delete-generic-password": (rc, "", "")})
+            self.store(run).delete()
+            self.assertEqual(run.calls, [["security", "delete-generic-password", "-a", "ntfy-connector", "-s", self.SVC]])
+        with self.assertRaises(state.StateError) as cm:
+            self.store(FakeRun(**{"delete-generic-password": (1, "", "keychain locked")})).delete()
+        self.assertEqual(cm.exception.key, "keychain.delete_failed")
+        self.assertIn("keychain locked", str(cm.exception))
+
     def test_error_messages_do_not_leak_payload(self):
         payload = json.dumps(self.TOPICS).encode().hex()
         run = FakeRun(**{"add-generic-password": (1, "", f'security: unknown command "{payload}"')})
