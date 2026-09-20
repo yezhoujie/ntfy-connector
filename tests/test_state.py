@@ -1,6 +1,6 @@
 """状态层：topic 池（密钥存储）与槽位租约。
 
-密钥存储用内存实现替身；钥匙串（security 命令）是外部程序，只在 AGENT_NTFY_SMOKE=1 时用临时条目真跑一遍。
+密钥存储用内存实现替身；钥匙串（security 命令）是外部程序，只在 NTFY_CONNECTOR_SMOKE=1 时用临时条目真跑一遍。
 """
 
 import json
@@ -77,7 +77,7 @@ class StateTest(unittest.TestCase):
         with self.assertRaises(state.StateError):
             self.state.slot_state("slot1\n")
         with self.assertRaises(state.StateError):
-            state.KeychainStore(service="AGENT_NTFY_TOPICS\n")
+            state.KeychainStore(service="NTFY_CONNECTOR_TOPICS\n")
 
     # 租约三态判定正确
     def test_three_slot_states(self):
@@ -289,7 +289,7 @@ class FakeRun:
 class KeychainStoreTest(unittest.TestCase):
     """只检查本模块自己的逻辑：命令怎么拼、返回码怎么判、回读怎么比。security 本身不在这里跑。"""
 
-    SVC = "AGENT_NTFY_TEST"
+    SVC = "NTFY_CONNECTOR_TEST"
     TOPICS = ["agent-ntfy-abcdefghijklmnopqrst", "agent-ntfy-0123456789abcdefghij"]
 
     def store(self, run):
@@ -335,7 +335,7 @@ class KeychainStoreTest(unittest.TestCase):
         with self.assertRaises(state.StateError):
             self.store(run).save(self.TOPICS)
 
-    # security 命令不存在（非 macOS，或 PATH 不对）：是状态层的报错，不是 socket 错；文案指路 AGENT_NTFY_STORE=file
+    # security 命令不存在（非 macOS，或 PATH 不对）：是状态层的报错，不是 socket 错；文案指路 NTFY_CONNECTOR_STORE=file
     def test_missing_security_binary_is_keychain_missing(self):
         def no_binary(argv, **kw):
             raise FileNotFoundError(2, "No such file or directory", "security")
@@ -345,7 +345,7 @@ class KeychainStoreTest(unittest.TestCase):
                 with self.assertRaises(state.StateError) as cm:
                     getattr(s, op)(*([] if op == "load" else [self.TOPICS]))
                 self.assertEqual(cm.exception.key, "keychain.missing")
-                self.assertIn("AGENT_NTFY_STORE=file", str(cm.exception))
+                self.assertIn("NTFY_CONNECTOR_STORE=file", str(cm.exception))
                 self.assertIn("security", str(cm.exception))
 
     def test_error_messages_do_not_leak_payload(self):
@@ -527,7 +527,7 @@ class DefaultStoreTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.home.parent, ignore_errors=True)
 
     def with_env(self, value):
-        return mock.patch.dict(os.environ, {"AGENT_NTFY_STORE": value} if value is not None else {}, clear=False)
+        return mock.patch.dict(os.environ, {"NTFY_CONNECTOR_STORE": value} if value is not None else {}, clear=False)
 
     def test_env_selects_implementation(self):
         with self.with_env("keychain"):
@@ -550,15 +550,15 @@ class DefaultStoreTest(unittest.TestCase):
                 self.assertIn(bad, str(cm.exception))
                 self.assertIn("keychain / file / dpapi", str(cm.exception))
 
-    # 测试进程的缺省：tests 包导入时把 AGENT_NTFY_STORE 钉成 file，没显式注入 store 的用例不会碰真钥匙串 / DPAPI
+    # 测试进程的缺省：tests 包导入时把 NTFY_CONNECTOR_STORE 钉成 file，没显式注入 store 的用例不会碰真钥匙串 / DPAPI
     def test_test_process_defaults_to_file_store(self):
-        self.assertEqual(os.environ.get("AGENT_NTFY_STORE"), "file", "tests/__init__.py 把缺省钉成 file；shell 里导出了别的值先 unset")
+        self.assertEqual(os.environ.get("NTFY_CONNECTOR_STORE"), "file", "tests/__init__.py 把缺省钉成 file；shell 里导出了别的值先 unset")
         self.assertIsInstance(state.default_store(self.home), state.FileStore)
 
     def test_platform_defaults(self):
         for env in (None, ""):  # 没给 / 空串都走平台缺省
             with self.subTest(env=env):
-                with mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "AGENT_NTFY_STORE"}, clear=True), self.with_env(env):
+                with mock.patch.dict(os.environ, {k: v for k, v in os.environ.items() if k != "NTFY_CONNECTOR_STORE"}, clear=True), self.with_env(env):
                     with mock.patch.object(state.sys, "platform", "darwin"):
                         self.assertIsInstance(state.default_store(self.home), state.KeychainStore)
                     with mock.patch.object(state.sys, "platform", "win32"):
@@ -568,7 +568,7 @@ class DefaultStoreTest(unittest.TestCase):
                             self.assertIsInstance(state.default_store(self.home), state.FileStore)
 
 
-@unittest.skipUnless(os.environ.get("AGENT_NTFY_SMOKE") == "1", "设 AGENT_NTFY_SMOKE=1 才真调 security（会在钥匙串建一个临时条目，跑完删除）")
+@unittest.skipUnless(os.environ.get("NTFY_CONNECTOR_SMOKE") == "1", "设 NTFY_CONNECTOR_SMOKE=1 才真调 security（会在钥匙串建一个临时条目，跑完删除）")
 class KeychainSmokeTest(unittest.TestCase):
     """对真实钥匙串走一遍：不存在 → 建池 → 回读一致 → 加槽位到超过 4KB 也不丢 → 删条目 → 确认删干净。"""
 

@@ -1,6 +1,6 @@
 """daemon 作为真子进程：起得来、探活能答、`--stop` / SIGTERM 后端点文件与 pid 文件删干净。
 
-子进程不碰钥匙串（`AGENT_NTFY_STORE=file`，池子落在临时 home 里）、不出网（`AGENT_NTFY_URL` 指向本机一个没人听的端口，
+子进程不碰钥匙串（`NTFY_CONNECTOR_STORE=file`，池子落在临时 home 里）、不出网（`NTFY_CONNECTOR_URL` 指向本机一个没人听的端口，
 订阅只会在后台一直重连）。每个用例的子进程都在 tearDown 里保证退出，不留孤儿。
 """
 
@@ -30,13 +30,13 @@ def wait_until(cond, timeout, what):
         time.sleep(0.05)
 
 
-@unittest.skipUnless(hasattr(state, "default_store"), "子进程 daemon 需要文件存储后端（AGENT_NTFY_STORE=file），否则会碰真钥匙串")
+@unittest.skipUnless(hasattr(state, "default_store"), "子进程 daemon 需要文件存储后端（NTFY_CONNECTOR_STORE=file），否则会碰真钥匙串")
 class DaemonProcessTest(unittest.TestCase):
     def setUp(self):
         self.home = Path(tempfile.mkdtemp(prefix="an-")) / "h"  # 短路径：unix 传输下 socket 路径有长度上限
         self.addCleanup(shutil.rmtree, self.home.parent, ignore_errors=True)
-        self.env = {k: v for k, v in os.environ.items() if k != "AGENT_NTFY_SMOKE"}
-        self.env.update({"AGENT_NTFY_STORE": "file", "AGENT_NTFY_URL": "http://127.0.0.1:1", "AGENT_NTFY_LANG": "zh"})
+        self.env = {k: v for k, v in os.environ.items() if k != "NTFY_CONNECTOR_SMOKE"}
+        self.env.update({"NTFY_CONNECTOR_STORE": "file", "NTFY_CONNECTOR_URL": "http://127.0.0.1:1", "NTFY_CONNECTOR_LANG": "zh"})
         self.procs: list[subprocess.Popen] = []
         self.stderr_path = self.home.parent / "daemon.stderr"
 

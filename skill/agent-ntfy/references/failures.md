@@ -44,7 +44,7 @@ agent-ntfy ask: input validation failed (7 issue(s)); fix them all and retry. Me
   recommend  : "temp" is not one of the option ids (existing ids: keep)
   reasoning  : missing. Required: why you lean that way + the strongest objection
   question   : missing. Required: one question answerable in one sentence
-  lang       : "fr" is not a valid choice (only zh / en); it selects the language of the fixed wording — omit it to fall back to AGENT_NTFY_LANG, then en
+  lang       : "fr" is not a valid choice (only zh / en); it selects the language of the fixed wording — omit it to fall back to NTFY_CONNECTOR_LANG, then en
 ```
 
 Other lines you may see, and the fix:
@@ -56,15 +56,15 @@ Other lines you may see, and the fix:
 | `options    : item 2 lacks consequence. Each item needs id / label / consequence, all non-empty` / `duplicate id: keep (items 1, 3)` | every option needs non-empty `id`, `label`, `consequence`; ids unique |
 | `options    : 6 items; 2-5 required …` | merge or drop options; more than 5 means the question has not converged |
 | `JSON       : not valid JSON: Illegal trailing comma before end of object (line 1, column 14)` | the heredoc is not valid JSON; check quotes and commas |
-| `agent-ntfy: AGENT_NTFY_LANG=xx is not a valid choice (only zh / en) …` (also rc 1, printed before any subcommand runs) | fix or unset the environment variable |
-| `agent-ntfy: AGENT_NTFY_IPC='xx' is not a valid choice (only unix / tcp); set one of them or unset it (platform default)` (rc 1, before any subcommand runs; `unix` on Windows is rejected the same way) | fix or unset the environment variable |
+| `agent-ntfy: NTFY_CONNECTOR_LANG=xx is not a valid choice (only zh / en) …` (also rc 1, printed before any subcommand runs) | fix or unset the environment variable |
+| `agent-ntfy: NTFY_CONNECTOR_IPC='xx' is not a valid choice (only unix / tcp); set one of them or unset it (platform default)` (rc 1, before any subcommand runs; `unix` on Windows is rejected the same way) | fix or unset the environment variable |
 
 The same report for `notify` starts with `agent-ntfy notify: input validation failed (N issue(s)); …`
 and knows two fields: `title      : an empty string. Required: the one-line hook shown in the notification shade — the preview shows nothing else`,
 `body       : an empty string. Required: the notification body; Markdown allowed (bold / lists / rules)`;
 an over-long body reads `body       : renders to N bytes, limit 4096, M bytes over. Trim body (nothing is truncated for you)`.
 
-The report is in the language selected by the JSON `lang` (if valid), else the process language (`--lang`, else `AGENT_NTFY_LANG`, else the system locale, else English).
+The report is in the language selected by the JSON `lang` (if valid), else the process language (`--lang`, else `NTFY_CONNECTOR_LANG`, else the system locale, else English).
 
 ## 3. rc 2: timeout
 
@@ -100,7 +100,7 @@ The daemon is not running. Start it:
 
 With the tcp transport (the default on Windows) the path in the parenthesis is `<home>/daemon.port`.
 Start the daemon as described in [daemon.md](daemon.md), then call again. (`AF_UNIX path too long` in
-place of `No such file or directory` means `AGENT_NTFY_HOME` is too deep for a Unix socket; see daemon.md §3.)
+place of `No such file or directory` means `NTFY_CONNECTOR_HOME` is too deep for a Unix socket; see daemon.md §3.)
 
 **Publish failed** (not sent): `agent-ntfy: message NOT sent: publishing to ntfy failed: <reason>`. The reason is an HTTP status, a connection error, or `This is rate limiting, not a code error` (ntfy.sh allows about 250 messages per day per source IP). Report it to the user; retrying immediately rarely helps.
 
@@ -134,7 +134,7 @@ agent-ntfy:   slot3: proj:/Users/me/work/cli (idle, unconfirmed)
 …
 ```
 
-This is the normal state once the pool has been in use for a while (leases never expire). Show the user the occupancy and let them decide: they turn remote mode off in one of those projects themselves (its `away off` releases the slot), or you `add-slot` and retry (`away on`, or `confirm-sub` for the new slot). A lease is exclusive — "idle" only means no question is pending right now, not that the project is done with it — so **never release another project's slot**: `release <slot>` on one refuses with `slot slotN is leased by proj:…, not by this project; …` (rc 4). Leases from a project whose directory no longer exists can be released by running `release <slot>` with `AGENT_NTFY_TARGET=<that holder>` set.
+This is the normal state once the pool has been in use for a while (leases never expire). Show the user the occupancy and let them decide: they turn remote mode off in one of those projects themselves (its `away off` releases the slot), or you `add-slot` and retry (`away on`, or `confirm-sub` for the new slot). A lease is exclusive — "idle" only means no question is pending right now, not that the project is done with it — so **never release another project's slot**: `release <slot>` on one refuses with `slot slotN is leased by proj:…, not by this project; …` (rc 4). Leases from a project whose directory no longer exists can be released by running `release <slot>` with `NTFY_CONNECTOR_TARGET=<that holder>` set.
 
 **No confirmed slot while remote mode is on** (`away: true` in the project's state file): `agent-ntfy: message NOT sent: In remote mode only confirmed slots can be used, and every confirmed slot is leased; occupancy below. Wait for the user to return and decide: turn remote mode off in one of those projects, or add a slot and confirm it (agent-ntfy add-slot, then confirm-sub)`, followed by the same occupancy lines. Free but unconfirmed slots are not taken automatically, because nobody is at the keyboard to confirm them; both ways out need the human.
 
@@ -178,13 +178,13 @@ the agent fixes alone; relay the line to the user.
 
 | stderr / log line | meaning | what to do |
 |---|---|---|
-| `state initialisation failed: AGENT_NTFY_STORE='xx' is not a valid choice (only keychain / file / dpapi); leave it unset for the platform default: macOS keychain / Windows DPAPI / 0600 file elsewhere` | the environment names a store that does not exist | fix or unset `AGENT_NTFY_STORE` |
-| `… the security command was not found (the keychain exists only on macOS); on other platforms set AGENT_NTFY_STORE=file (Linux) or dpapi (Windows)` | `keychain` store selected (or defaulted) on a machine without the macOS `security` command | set `AGENT_NTFY_STORE` as the line says |
-| `… DPAPI is only available on Windows (this platform is xx); elsewhere use AGENT_NTFY_STORE=file or keychain` | `dpapi` store selected off Windows | same |
+| `state initialisation failed: NTFY_CONNECTOR_STORE='xx' is not a valid choice (only keychain / file / dpapi); leave it unset for the platform default: macOS keychain / Windows DPAPI / 0600 file elsewhere` | the environment names a store that does not exist | fix or unset `NTFY_CONNECTOR_STORE` |
+| `… the security command was not found (the keychain exists only on macOS); on other platforms set NTFY_CONNECTOR_STORE=file (Linux) or dpapi (Windows)` | `keychain` store selected (or defaulted) on a machine without the macOS `security` command | set `NTFY_CONNECTOR_STORE` as the line says |
+| `… DPAPI is only available on Windows (this platform is xx); elsewhere use NTFY_CONNECTOR_STORE=file or keychain` | `dpapi` store selected off Windows | same |
 | `… decrypting topic pool file <home>/topics.dpapi failed (…): only the Windows user who encrypted it can decrypt it, and only on the same machine; after changing account / machine move it away and restart (a new pool is generated; the phone must re-subscribe)` | the pool file belongs to another Windows account or machine | the user moves the file away; the new pool needs `confirm-sub` again |
 | `… topic pool file <home>/topics.json is not a JSON array of strings (…); if it was not edited by hand, move it away and restart (a new pool is generated; the phone must re-subscribe)` | the file store's pool file is damaged | same |
 | `… reading topic pool file <path> failed: …` / `… writing topic pool file <path> failed: …` | permissions or disk problem on the pool file | the user checks the path; `add-slot` reports the write variant as rc 3 |
-| `… reading keychain item 'AGENT_NTFY_TOPICS' failed (rc=N): …` / `… writing keychain item … failed` | the macOS keychain refused (locked, or access not granted to this Python) | the user unlocks / grants access in the keychain prompt on screen |
-| `cannot listen for IPC: <path>: <error>` (`… Unix socket paths have a length limit (system-dependent); pick a shorter AGENT_NTFY_HOME` for the unix transport) | the endpoint could not be created | shorter `AGENT_NTFY_HOME`, or check what holds the path / port |
+| `… reading keychain item 'NTFY_CONNECTOR_TOPICS' failed (rc=N): …` / `… writing keychain item … failed` | the macOS keychain refused (locked, or access not granted to this Python) | the user unlocks / grants access in the keychain prompt on screen |
+| `cannot listen for IPC: <path>: <error>` (`… Unix socket paths have a length limit (system-dependent); pick a shorter NTFY_CONNECTOR_HOME` for the unix transport) | the endpoint could not be created | shorter `NTFY_CONNECTOR_HOME`, or check what holds the path / port |
 | `a daemon is already running (<path> accepts connections); not starting a second one` | something answers on the endpoint | `daemon --status`; with tcp, if `--status` says not running, an unrelated process holds the port: delete `daemon.port` and start again |
 | `unauthenticated connection (token mismatch)` | a client presented a token that is not this daemon's (`daemon.port` out of date) | the client retries after `daemon --status`; see §4 |

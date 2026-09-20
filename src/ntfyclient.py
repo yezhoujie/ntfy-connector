@@ -16,7 +16,7 @@
 断线（含对端关流）时抛 NtfyError 让调用方决定何时以 since=<最后消费的 id> 重连；
 Subscription.close() 可以从别的线程调用，让阻塞中的迭代立刻以 NtfyClosed 结束。
 
-环境变量: AGENT_NTFY_URL（换 ntfy 实例，默认 https://ntfy.sh）
+环境变量: NTFY_CONNECTOR_URL（换 ntfy 实例，默认 https://ntfy.sh）
 """
 
 import base64
@@ -34,7 +34,7 @@ import urllib.request
 import texts
 from collections.abc import Iterable
 
-BASE_URL = os.environ.get("AGENT_NTFY_URL", "https://ntfy.sh").rstrip("/")
+BASE_URL = os.environ.get("NTFY_CONNECTOR_URL", "https://ntfy.sh").rstrip("/")
 TIMEOUT = 30  # 发布 / 更新 / clear 单次请求
 # 订阅流两次读之间的最长等待。ntfy 每 45 秒发一条 keepalive 事件，超过这个时长一个字都没来就当连接死了
 STREAM_TIMEOUT = 90

@@ -44,7 +44,7 @@ agent ──ask (JSON on stdin)──▶ agent-ntfy ──local socket──▶ 
 - A resident **daemon** is the only ntfy subscriber. Anything you send while no question is pending is injected into the agent's session as an instruction prefixed with `[agent-ntfy remote] ` (this is the one part that needs herdr; §2 lists what works without it).
 - Each **project** (the git toplevel of the directory the agent works in, otherwise that directory) leases one **slot** = one random ntfy topic out of a pool kept in the keychain, a DPAPI file or a 0600 file (§7). Replies are routed by topic. The lease also remembers the herdr pane from which the project last ran `ask`, `notify`, `slots`, `release` (no argument), `away on` or `away status`; that is where phone messages are injected.
 - The channel carries text; it never interprets it, never answers for you, never dedupes.
-- The local socket is a Unix socket on macOS / Linux and a loopback TCP port on Windows (§9, `AGENT_NTFY_IPC`).
+- The local socket is a Unix socket on macOS / Linux and a loopback TCP port on Windows (§9, `NTFY_CONNECTOR_IPC`).
 
 ## 2. Requirements
 
@@ -132,7 +132,7 @@ agent-ntfy daemon                 # inside herdr: run it in a spare pane instead
 agent-ntfy daemon --status        # daemon: pid 12345  subscription: connected  pending questions: 0  confirming: 0  slots: 5  transport: unix
 ```
 
-Paths are shown with `~` here; the CLI prints them expanded. If `--detach` reports `daemon (pid 12345) not ready within 5 s, still starting; check later with agent-ntfy daemon --status, log …`, look at the log — one possible cause on macOS is a keychain dialog on screen on first run (the pool is read through the `security` command): answer it, then check `--status`. Want Chinese wording? Pass `--lang zh` (or set `AGENT_NTFY_LANG=zh`, or just have a Chinese shell locale): the daemon keeps the language it was started with (when `away on` starts it for you, it passes the caller's language along). Never start the daemon as a background job of the agent's own shell: it would die with the agent. You do not have to do this step by hand: `away on` (§9.1) starts the daemon when none answers.
+Paths are shown with `~` here; the CLI prints them expanded. If `--detach` reports `daemon (pid 12345) not ready within 5 s, still starting; check later with agent-ntfy daemon --status, log …`, look at the log — one possible cause on macOS is a keychain dialog on screen on first run (the pool is read through the `security` command): answer it, then check `--status`. Want Chinese wording? Pass `--lang zh` (or set `NTFY_CONNECTOR_LANG=zh`, or just have a Chinese shell locale): the daemon keeps the language it was started with (when `away on` starts it for you, it passes the caller's language along). Never start the daemon as a background job of the agent's own shell: it would die with the agent. You do not have to do this step by hand: `away on` (§9.1) starts the daemon when none answers.
 
 **Step 2 — confirm that your phone gets notifications for slot 1.** Run this in your own terminal (not through the agent: it prints the topic name, which is the password):
 
@@ -213,15 +213,15 @@ Other Android ROMs have the same switches under different names; only MIUI has b
 ## 7. Security
 
 - **The topic name is the password.** Anyone who knows it can read every question, see every reply, and — with herdr — type instructions straight into your agent. There is no second lock by design (the channel does not filter content). Keep it off screenshots, out of chat, out of git.
-- Topics are 20 random lowercase letters and digits after the prefix (about 2^103 possibilities). Where the pool is stored depends on the platform (`AGENT_NTFY_STORE`, §9): the **macOS keychain** (per-app authorisation); on **Windows** a DPAPI-encrypted file `~/.agent-ntfy/topics.dpapi` (decryptable only by the same Windows user on the same machine); elsewhere a plain `0600` file `~/.agent-ntfy/topics.json`. The last two can be read by any process running as your user — a wider boundary than the keychain; accept it or self-host ntfy. The lease file (`~/.agent-ntfy/leases.json`: slot numbers, holder ids, timestamps, pane ids), the per-project state file and the daemon log never contain topic names or message text.
+- Topics are 20 random lowercase letters and digits after the prefix (about 2^103 possibilities). Where the pool is stored depends on the platform (`NTFY_CONNECTOR_STORE`, §9): the **macOS keychain** (per-app authorisation); on **Windows** a DPAPI-encrypted file `~/.agent-ntfy/topics.dpapi` (decryptable only by the same Windows user on the same machine); elsewhere a plain `0600` file `~/.agent-ntfy/topics.json`. The last two can be read by any process running as your user — a wider boundary than the keychain; accept it or self-host ntfy. The lease file (`~/.agent-ntfy/leases.json`: slot numbers, holder ids, timestamps, pane ids), the per-project state file and the daemon log never contain topic names or message text.
 - **Content travels in clear** through ntfy.sh. Questions describe your project; do not put secrets in them.
-- To rotate all topics: on macOS delete the keychain item (account `agent-ntfy`, service `AGENT_NTFY_TOPICS`, e.g. `security delete-generic-password -a agent-ntfy -s AGENT_NTFY_TOPICS`); elsewhere delete `topics.json` / `topics.dpapi`. Then restart the daemon: a new pool is generated, old leases are discarded, every slot needs confirming again.
-- **Do not create the keychain item by hand.** The program looks it up by account `agent-ntfy` *and* service `AGENT_NTFY_TOPICS`; an item with any other account name is invisible to it, so it would silently create a second pool while you believe yours is in use.
+- To rotate all topics: on macOS delete the keychain item (account `agent-ntfy`, service `NTFY_CONNECTOR_TOPICS`, e.g. `security delete-generic-password -a agent-ntfy -s NTFY_CONNECTOR_TOPICS`); elsewhere delete `topics.json` / `topics.dpapi`. Then restart the daemon: a new pool is generated, old leases are discarded, every slot needs confirming again.
+- **Do not create the keychain item by hand.** The program looks it up by account `agent-ntfy` *and* service `NTFY_CONNECTOR_TOPICS`; an item with any other account name is invisible to it, so it would silently create a second pool while you believe yours is in use.
 
 ## 8. Known limits
 
 - Linux and Windows have unit-test coverage only, no end-to-end run in a real environment (§2.1). Pull requests with a real-machine report are welcome.
-- ntfy.sh's free tier allows about **250 messages per day per source IP**, shared by questions, notifications, "answered" updates, receipts and confirmations. Enough for normal use; if not, self-host ntfy and set `AGENT_NTFY_URL`.
+- ntfy.sh's free tier allows about **250 messages per day per source IP**, shared by questions, notifications, "answered" updates, receipts and confirmations. Enough for normal use; if not, self-host ntfy and set `NTFY_CONNECTOR_URL`.
 - Messages are cached 12 hours on ntfy.sh; a phone offline longer than that misses them. The default `ask` timeout is 12 hours for the same reason.
 - One button per card, 2–5 options, body ≤ 3584 bytes, title ≤ 960 bytes (`notify`: body ≤ 4096 bytes after rendering). Over-length input is rejected with the exact numbers, never truncated.
 - The daemon ignores proxy environment variables (see §2).
@@ -240,17 +240,17 @@ Tested on real sessions: **claude** (asking and injection, including replay afte
 
 | variable | default | effect |
 |---|---|---|
-| `AGENT_NTFY_HOME` | `~/.agent-ntfy` | state directory (dir 0700, files 0600 where the platform has such bits): `daemon.sock` or `daemon.port` (see `AGENT_NTFY_IPC`), `daemon.pid`, `daemon.log`, `leases.json`, and the topic pool file where one is used (`topics.json` / `topics.dpapi`, see `AGENT_NTFY_STORE`). With the Unix-socket transport keep the path short: the socket path has a system-dependent length limit; too deep and the daemon refuses to start with `cannot listen for IPC: … Unix socket paths have a length limit (system-dependent); pick a shorter AGENT_NTFY_HOME` |
-| `AGENT_NTFY_LANG` | (system locale, else `en`) | language of all fixed wording (card labels, button, receipts, CLI output, `--help`): `zh` or `en`. Resolution order: `--lang zh\|en` on the command line (a top-level option, before the subcommand) > this variable > the system locale (`LC_ALL` / `LC_MESSAGES` / `LANG` starting with `zh`, or a Chinese Windows locale, means `zh`) > `en`. Any other value is an error, not a fallback (unless `--lang` is given, which then wins and the variable is ignored). The agent can override it per question with the `lang` field. When the CLI itself opens a herdr pane (`away on` starting the daemon, `confirm-sub` opening the check for you) or detaches a daemon, it passes the resolved language along with `--lang`, so the pane's own shell does not decide the wording; only a daemon or command you start by hand in a pane inherits that pane's environment |
-| `AGENT_NTFY_TARGET` | `proj:<project root>` | the identity that leases a slot (this is what `slots` shows as the holder). Set it to share one slot across projects or to keep one apart; the same value always reuses the same slot |
-| `AGENT_NTFY_URL` | `https://ntfy.sh` | another ntfy instance, e.g. self-hosted |
-| `AGENT_NTFY_IPC` | `unix` on macOS / Linux, `tcp` on Windows | transport between the CLI and the daemon. `unix`: a Unix socket `daemon.sock`, protected by file permissions. `tcp`: a loopback TCP port; `daemon.port` holds two lines — the port and a random token — and every request's first line carries the token (any local process could otherwise connect). A leftover endpoint file is treated as stale unless a connection to it succeeds ("port accepts a connection ⇒ an instance is already running"); if an unrelated process happens to hold that port, delete `daemon.port` and start the daemon again. `unix` is rejected on Windows; any other value is an error |
-| `AGENT_NTFY_STORE` | `keychain` on macOS, `dpapi` on Windows, `file` elsewhere | where the topic pool lives: `keychain` (macOS `security` command; on other platforms the error says `the security command was not found (the keychain exists only on macOS); on other platforms set AGENT_NTFY_STORE=file (Linux) or dpapi (Windows)`), `file` (`topics.json`, mode 0600), `dpapi` (`topics.dpapi`, Windows only — elsewhere `DPAPI is only available on Windows`). A pool file that cannot be decrypted (other user / other machine) or is not a JSON array of strings is reported with the file path; move the file away and restart to get a fresh pool (the phone must re-subscribe). See §7 for what each choice protects against |
-| `AGENT_NTFY_KEYCHAIN` | `AGENT_NTFY_TOPICS` | keychain service name of the topic pool (macOS, `keychain` store only) |
-| `AGENT_NTFY_TOPIC_PREFIX` | `agent-ntfy` | prefix of newly generated topic names (`<prefix>-<20 random chars>`); letters, digits, `-`, `_`, at most 40 |
+| `NTFY_CONNECTOR_HOME` | `~/.agent-ntfy` | state directory (dir 0700, files 0600 where the platform has such bits): `daemon.sock` or `daemon.port` (see `NTFY_CONNECTOR_IPC`), `daemon.pid`, `daemon.log`, `leases.json`, and the topic pool file where one is used (`topics.json` / `topics.dpapi`, see `NTFY_CONNECTOR_STORE`). With the Unix-socket transport keep the path short: the socket path has a system-dependent length limit; too deep and the daemon refuses to start with `cannot listen for IPC: … Unix socket paths have a length limit (system-dependent); pick a shorter NTFY_CONNECTOR_HOME` |
+| `NTFY_CONNECTOR_LANG` | (system locale, else `en`) | language of all fixed wording (card labels, button, receipts, CLI output, `--help`): `zh` or `en`. Resolution order: `--lang zh\|en` on the command line (a top-level option, before the subcommand) > this variable > the system locale (`LC_ALL` / `LC_MESSAGES` / `LANG` starting with `zh`, or a Chinese Windows locale, means `zh`) > `en`. Any other value is an error, not a fallback (unless `--lang` is given, which then wins and the variable is ignored). The agent can override it per question with the `lang` field. When the CLI itself opens a herdr pane (`away on` starting the daemon, `confirm-sub` opening the check for you) or detaches a daemon, it passes the resolved language along with `--lang`, so the pane's own shell does not decide the wording; only a daemon or command you start by hand in a pane inherits that pane's environment |
+| `NTFY_CONNECTOR_TARGET` | `proj:<project root>` | the identity that leases a slot (this is what `slots` shows as the holder). Set it to share one slot across projects or to keep one apart; the same value always reuses the same slot |
+| `NTFY_CONNECTOR_URL` | `https://ntfy.sh` | another ntfy instance, e.g. self-hosted |
+| `NTFY_CONNECTOR_IPC` | `unix` on macOS / Linux, `tcp` on Windows | transport between the CLI and the daemon. `unix`: a Unix socket `daemon.sock`, protected by file permissions. `tcp`: a loopback TCP port; `daemon.port` holds two lines — the port and a random token — and every request's first line carries the token (any local process could otherwise connect). A leftover endpoint file is treated as stale unless a connection to it succeeds ("port accepts a connection ⇒ an instance is already running"); if an unrelated process happens to hold that port, delete `daemon.port` and start the daemon again. `unix` is rejected on Windows; any other value is an error |
+| `NTFY_CONNECTOR_STORE` | `keychain` on macOS, `dpapi` on Windows, `file` elsewhere | where the topic pool lives: `keychain` (macOS `security` command; on other platforms the error says `the security command was not found (the keychain exists only on macOS); on other platforms set NTFY_CONNECTOR_STORE=file (Linux) or dpapi (Windows)`), `file` (`topics.json`, mode 0600), `dpapi` (`topics.dpapi`, Windows only — elsewhere `DPAPI is only available on Windows`). A pool file that cannot be decrypted (other user / other machine) or is not a JSON array of strings is reported with the file path; move the file away and restart to get a fresh pool (the phone must re-subscribe). See §7 for what each choice protects against |
+| `NTFY_CONNECTOR_KEYCHAIN` | `NTFY_CONNECTOR_TOPICS` | keychain service name of the topic pool (macOS, `keychain` store only) |
+| `NTFY_CONNECTOR_TOPIC_PREFIX` | `agent-ntfy` | prefix of newly generated topic names (`<prefix>-<20 random chars>`); letters, digits, `-`, `_`, at most 40 |
 | `HERDR_ENV`, `HERDR_PANE_ID` | set by herdr | detected, never set by you: inside herdr, `ask`, `notify`, `slots`, `release` (no argument), `away on` and `away status` record the current pane on the project's lease, and phone messages are injected there (`confirm-sub`, `release <slot>`, `add-slot`, `daemon`, `away off` do not touch it) |
 
-`--home <dir>` on the command line (before the subcommand) overrides `AGENT_NTFY_HOME`.
+`--home <dir>` on the command line (before the subcommand) overrides `NTFY_CONNECTOR_HOME`.
 
 ### 9.1 Remote mode and the per-project state file
 
@@ -297,7 +297,7 @@ Observed on a real phone; none is a bug.
 
 ## 11. CLI reference
 
-Output of `AGENT_NTFY_LANG=en python3 scripts/ntfy_connector.py --help` and `<subcommand> --help` (`slots` and `add-slot` take no options), with the home directory shown as `~`:
+Output of `NTFY_CONNECTOR_LANG=en python3 scripts/ntfy_connector.py --help` and `<subcommand> --help` (`slots` and `add-slot` take no options), with the home directory shown as `~`:
 
 ```
 usage: agent-ntfy [-h] [--lang {zh,en}] [--home HOME]
@@ -326,7 +326,7 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
-  --lang {zh,en}        wording language (zh / en; default: AGENT_NTFY_LANG,
+  --lang {zh,en}        wording language (zh / en; default: NTFY_CONNECTOR_LANG,
                         then the system locale, then en)
   --home HOME           state directory (default ~/.agent-ntfy)
 
@@ -394,7 +394,7 @@ options:
 
 Exit codes of `ask`: 0 reply on stdout · 1 invalid input, nothing sent · 2 timeout · 3 channel failure (daemon not running, connection lost, publish failed; stderr says whether the message went out) · 4 a human must act (unconfirmed slot, all slots leased, target already waiting) · 130 Ctrl-C. `notify`: 0 sent · 1 invalid input · 3 channel failure · 4 a human must act (no 2: it does not wait). `confirm-sub`: 0 confirmed (or the check was started in a herdr pane) · 1 unknown slot · 2 no Enter or no tap within the timeout · 3 channel failure · 4 not a terminal and no herdr pane possible (and no `--subscribed`), stdin ended before Enter, or slot busy · 130 Ctrl-C. The stderr text for each case is in [references/failures.md](references/failures.md).
 
-Set `AGENT_NTFY_LANG=zh` to get the same help and messages in Chinese. The daemon log is written in Chinese regardless.
+Set `NTFY_CONNECTOR_LANG=zh` to get the same help and messages in Chinese. The daemon log is written in Chinese regardless.
 
 ## 12. Versions and upgrading
 
@@ -409,10 +409,10 @@ npx skills add 'yezhoujie/agent-remote-communication-skills#agent-ntfy/v0.1.3' -
 1. Stop the running daemon **with the CLI you have now**: `agent-ntfy daemon --stop`. If you already replaced the files, send it `kill -TERM <pid>` instead (the pid is in `~/.agent-ntfy/daemon.pid`). Reason: since 0.1.0 `--stop` asks the daemon over its socket; a daemon from an earlier version does not know that command, so the new CLI reports `did not acknowledge the stop` and exits 1.
 2. Update the files: `npx skills update` (or run the install command again, or copy the directory).
 3. Start the new daemon: `agent-ntfy daemon --detach`, then `agent-ntfy daemon --status` should show `transport: unix` (or `tcp` on Windows). A restart is required in any case: an earlier daemon ignores the fields the new CLI sends.
-4. Run `agent-ntfy slots`. Leases taken before 0.1.0 show a pane id such as `wG:p1` as holder instead of `proj:<path>`; free them with `AGENT_NTFY_TARGET=<that holder> agent-ntfy release <slot>` (`release <slot>` only releases your own project's lease; `release` without argument only finds the current project's lease).
+4. Run `agent-ntfy slots`. Leases taken before 0.1.0 show a pane id such as `wG:p1` as holder instead of `proj:<path>`; free them with `NTFY_CONNECTOR_TARGET=<that holder> agent-ntfy release <slot>` (`release <slot>` only releases your own project's lease; `release` without argument only finds the current project's lease).
 5. In the herdr pane your agent works in, run `agent-ntfy slots` (or `ask` / `notify` / `away status`) so the project's lease records that pane; phone messages are injected there.
 
-Nothing else migrates: the state directory layout and `state.json` are unchanged, and the defaults (`AGENT_NTFY_IPC`, `AGENT_NTFY_STORE`) reproduce the previous behaviour on macOS.
+Nothing else migrates: the state directory layout and `state.json` are unchanged, and the defaults (`NTFY_CONNECTOR_IPC`, `NTFY_CONNECTOR_STORE`) reproduce the previous behaviour on macOS.
 
 ## 13. Integration: keeping the skill in force for the whole session
 

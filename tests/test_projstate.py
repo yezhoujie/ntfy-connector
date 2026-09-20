@@ -202,7 +202,7 @@ class AwayCommandTest(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(json.loads(out)["away"], False)
 
-            code, out, err = ta.run(["--home", "/nonexistent/agent-ntfy-home", "away", "status"], env={"AGENT_NTFY_LANG": "en"}, root=ta.CWD)
+            code, out, err = ta.run(["--home", "/nonexistent/agent-ntfy-home", "away", "status"], env={"NTFY_CONNECTOR_LANG": "en"}, root=ta.CWD)
             self.assertEqual(code, 0)
             self.assertIsNone(CJK.search(out + err), (out, err))
             self.assertIn("off", out)
@@ -258,7 +258,7 @@ class AwayCommandTest(unittest.TestCase):
         code, out, err = ta.run(["--home", "/nonexistent/agent-ntfy-home", "away", "status", "--json"], root=root)
         self.assertEqual((code, json.loads(out)["slot"]), (0, "slot1"))
         self.assertEqual(projstate.state_path(root).read_text(encoding="utf-8"), before)
-        code, out, err = ta.run(["--home", "/nonexistent/agent-ntfy-home", "away", "status"], env={"AGENT_NTFY_LANG": "en"}, root=root)
+        code, out, err = ta.run(["--home", "/nonexistent/agent-ntfy-home", "away", "status"], env={"NTFY_CONNECTOR_LANG": "en"}, root=root)
         self.assertIsNone(CJK.search(out + err), (out, err))
 
     # daemon 在跑：以它的租约为准校对文件——文件漏记 / 记错 / 租约已不在，三种都改写并提示「已校正」；一致就不提示
@@ -358,8 +358,8 @@ class HooksTest(unittest.TestCase):
             self.assertIn("someone-else", err)
             self.assertEqual(h.state.slots()["slot2"]["leased_by"], "someone-else")
             self.assertEqual(self.state(root)["slot"], "slot1")
-            # 那个项目的目录已不在时的兜底：以它的身份跑（AGENT_NTFY_TARGET），归属就对上了；本项目文件照样不动
-            code, out, err = ta.run(["--home", str(h.home), "release", "slot2"], env={**ta.HERDR, "AGENT_NTFY_TARGET": "someone-else"}, root=ta.CWD)
+            # 那个项目的目录已不在时的兜底：以它的身份跑（NTFY_CONNECTOR_TARGET），归属就对上了；本项目文件照样不动
+            code, out, err = ta.run(["--home", str(h.home), "release", "slot2"], env={**ta.HERDR, "NTFY_CONNECTOR_TARGET": "someone-else"}, root=ta.CWD)
             self.assertEqual((code, err), (0, ""))
             self.assertIsNone(h.state.slots()["slot2"]["leased_by"])
             self.assertEqual(self.state(root)["slot"], "slot1")

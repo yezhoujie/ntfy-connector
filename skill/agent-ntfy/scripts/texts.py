@@ -4,13 +4,13 @@
 表里的串不含 topic / 路径等运行时值，一律 {占位} 由调用方填；不带参数取值时不做 format，字面的花括号原样保留。
 
 语言由调用方显式传，本模块不读环境变量。解析只在两处发生：ask 入口（JSON lang 压过进程语言）与
-daemon / CLI 进程入口（--lang → AGENT_NTFY_LANG → 系统 locale → en），深层模块只认传进来的 lang。
+daemon / CLI 进程入口（--lang → NTFY_CONNECTOR_LANG → 系统 locale → en），深层模块只认传进来的 lang。
 控制标记（__agent-ntfy:…__）与 Title 里的 [<tag>] 是协议，不在表里、不翻译。
 """
 
 LANGS = ("zh", "en")
 DEFAULT_LANG = "en"
-ENV_VAR = "AGENT_NTFY_LANG"
+ENV_VAR = "NTFY_CONNECTOR_LANG"
 
 TEXTS: dict[str, dict[str, str]] = {
     "zh": {
@@ -126,11 +126,11 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.connect_failed.not_sent": "连不上 daemon（{path}：{error}）。消息未发送。",
         "cli.no_response": "daemon 没有回应",
         "cli.protocol.not_object": "daemon 回的不是 JSON 对象",
-        "cli.bad_env_lang": "AGENT_NTFY_LANG={value} 不是可选值（只认 zh / en）；改成其中之一，或去掉它（不设就按系统 locale，再缺省 en；命令行 --lang 压过它）",
-        "cli.bad_env_ipc": "AGENT_NTFY_IPC={value} 不是可选值（只认 unix / tcp）；改成其中之一，或去掉它（按平台缺省）",
+        "cli.bad_env_lang": "NTFY_CONNECTOR_LANG={value} 不是可选值（只认 zh / en）；改成其中之一，或去掉它（不设就按系统 locale，再缺省 en；命令行 --lang 压过它）",
+        "cli.bad_env_ipc": "NTFY_CONNECTOR_IPC={value} 不是可选值（只认 unix / tcp）；改成其中之一，或去掉它（按平台缺省）",
         # ---- argparse 的 help / description（--help 输出）
         "help.prog": "经 ntfy.sh 把需要人拍板的事推到手机，并把裁决带回来",
-        "help.lang": "文案语言（zh / en；不给则按 AGENT_NTFY_LANG，再按系统 locale，再缺省 en）",
+        "help.lang": "文案语言（zh / en；不给则按 NTFY_CONNECTOR_LANG，再按系统 locale，再缺省 en）",
         "help.home": "状态目录（默认 {home}）",
         "help.ask": "阻塞提问，JSON 从 stdin 读",
         "help.ask.timeout": "等回复的秒数（默认 12 小时）",
@@ -278,7 +278,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "validate.options.dup_sep": "、",
         "validate.recommend": '"{rec}" 不在 options 的 id 里（现有 id: {ids}）',
         "validate.recommend.none": "无",
-        "validate.lang": '"{value}" 不是可选值（只认 {choices}）；固定文案按它切换语言，不给就按进程的语言（--lang / AGENT_NTFY_LANG / 系统 locale / en）',
+        "validate.lang": '"{value}" 不是可选值（只认 {choices}）；固定文案按它切换语言，不给就按进程的语言（--lang / NTFY_CONNECTOR_LANG / 系统 locale / en）',
         "validate.body_too_long": "渲染后 {size} 字节，上限 {limit} 字节，超出 {over} 字节。精简 description / consequence / reasoning（不会替你截断）",
         "validate.title_too_long": "{size} 字节，上限 {limit} 字节，超出 {over} 字节。title 是通知栏那一行钩子，写短",
         "validate.title_newline": "含换行。title 是通知栏那一行，只能一行",
@@ -298,9 +298,9 @@ TEXTS: dict[str, dict[str, str]] = {
         "state.file.corrupt": "topic 池文件 {path} 的内容不是字符串数组（{error}）；确认没被手改过，否则把它移走后重启（会生成新池子，手机要重新订阅）",
         "state.file.read_failed": "读 topic 池文件 {path} 失败：{error}",
         "state.file.write_failed": "写 topic 池文件 {path} 失败：{error}",
-        "state.keychain.missing": "找不到 security 命令（钥匙串只在 macOS 上有）；别的平台设 AGENT_NTFY_STORE=file（Linux）或 dpapi（Windows）",
-        "state.store.bad_env": "AGENT_NTFY_STORE={value} 不是可选值（只认 {choices}）；不设就按平台缺省：macOS 钥匙串 / Windows DPAPI / 其余 0600 文件",
-        "state.dpapi.unavailable": "DPAPI 只在 Windows 上可用（当前平台 {platform}）；别的平台用 AGENT_NTFY_STORE=file 或 keychain",
+        "state.keychain.missing": "找不到 security 命令（钥匙串只在 macOS 上有）；别的平台设 NTFY_CONNECTOR_STORE=file（Linux）或 dpapi（Windows）",
+        "state.store.bad_env": "NTFY_CONNECTOR_STORE={value} 不是可选值（只认 {choices}）；不设就按平台缺省：macOS 钥匙串 / Windows DPAPI / 其余 0600 文件",
+        "state.dpapi.unavailable": "DPAPI 只在 Windows 上可用（当前平台 {platform}）；别的平台用 NTFY_CONNECTOR_STORE=file 或 keychain",
         "state.dpapi.unprotect_failed": "解密 topic 池文件 {path} 失败（{error}）：它只能由加密它的那个 Windows 用户在同一台机器上解开；换了账户 / 机器就把它移走后重启（会生成新池子，手机要重新订阅）",
         "state.slot.bad_name": "槽位名不合法：{slot}（应形如 slot1）",
         "state.slot.missing": "槽位 {slot} 不存在（池子里只有 {n} 个）",
@@ -355,9 +355,9 @@ TEXTS: dict[str, dict[str, str]] = {
         # ---- daemon 起不来（DaemonError）——CLI 打到 stderr
         "daemon_error.bad_lang": "lang 只能是 zh / en，给的是 {value}",
         "daemon_error.socket": "无法监听 IPC：{path}：{error}{hint}",
-        "daemon_error.socket.unix_hint": "。unix socket 路径有长度上限（系统上限），换一个短一点的 AGENT_NTFY_HOME",
+        "daemon_error.socket.unix_hint": "。unix socket 路径有长度上限（系统上限），换一个短一点的 NTFY_CONNECTOR_HOME",
         "daemon_error.unauthorized": "未认证的连接（token 不符）",
-        "daemon_error.bad_ipc": "AGENT_NTFY_IPC 只能是 unix / tcp：{error}",
+        "daemon_error.bad_ipc": "NTFY_CONNECTOR_IPC 只能是 unix / tcp：{error}",
         "daemon_error.state_init": "状态初始化失败：{error}",
         "daemon_error.already_running": "已有 daemon 在跑（{path} 连得上），不起第二个",
         # ---- --timeout 参数错（argparse）
@@ -468,10 +468,10 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.connect_failed.not_sent": "can't connect to the daemon ({path}: {error}). Message NOT sent.",
         "cli.no_response": "no response from the daemon",
         "cli.protocol.not_object": "the daemon replied with something that is not a JSON object",
-        "cli.bad_env_lang": "AGENT_NTFY_LANG={value} is not a valid choice (only zh / en); set one of them or unset it (then the system locale, else en; --lang on the command line overrides it)",
-        "cli.bad_env_ipc": "AGENT_NTFY_IPC={value} is not a valid choice (only unix / tcp); set one of them or unset it (platform default)",
+        "cli.bad_env_lang": "NTFY_CONNECTOR_LANG={value} is not a valid choice (only zh / en); set one of them or unset it (then the system locale, else en; --lang on the command line overrides it)",
+        "cli.bad_env_ipc": "NTFY_CONNECTOR_IPC={value} is not a valid choice (only unix / tcp); set one of them or unset it (platform default)",
         "help.prog": "Push decisions that need a human to your phone via ntfy.sh, and bring the verdict back",
-        "help.lang": "wording language (zh / en; default: AGENT_NTFY_LANG, then the system locale, then en)",
+        "help.lang": "wording language (zh / en; default: NTFY_CONNECTOR_LANG, then the system locale, then en)",
         "help.home": "state directory (default {home})",
         "help.ask": "block and ask: reads the question JSON from stdin",
         "help.ask.timeout": "seconds to wait for a reply (default 12 hours)",
@@ -617,7 +617,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "validate.options.dup_sep": ", ",
         "validate.recommend": '"{rec}" is not one of the option ids (existing ids: {ids})',
         "validate.recommend.none": "none",
-        "validate.lang": '"{value}" is not a valid choice (only {choices}); it selects the language of the fixed wording — omit it to fall back to the process language (--lang / AGENT_NTFY_LANG / system locale / en)',
+        "validate.lang": '"{value}" is not a valid choice (only {choices}); it selects the language of the fixed wording — omit it to fall back to the process language (--lang / NTFY_CONNECTOR_LANG / system locale / en)',
         "validate.body_too_long": "renders to {size} bytes, limit {limit}, {over} bytes over. Trim description / consequence / reasoning (nothing is truncated for you)",
         "validate.title_too_long": "{size} bytes, limit {limit}, {over} bytes over. title is the one-line hook in the notification shade — keep it short",
         "validate.title_newline": "contains a line break. title is a single notification line",
@@ -635,9 +635,9 @@ TEXTS: dict[str, dict[str, str]] = {
         "state.file.corrupt": "topic pool file {path} is not a JSON array of strings ({error}); if it was not edited by hand, move it away and restart (a new pool is generated; the phone must re-subscribe)",
         "state.file.read_failed": "reading topic pool file {path} failed: {error}",
         "state.file.write_failed": "writing topic pool file {path} failed: {error}",
-        "state.keychain.missing": "the security command was not found (the keychain exists only on macOS); on other platforms set AGENT_NTFY_STORE=file (Linux) or dpapi (Windows)",
-        "state.store.bad_env": "AGENT_NTFY_STORE={value} is not a valid choice (only {choices}); leave it unset for the platform default: macOS keychain / Windows DPAPI / 0600 file elsewhere",
-        "state.dpapi.unavailable": "DPAPI is only available on Windows (this platform is {platform}); elsewhere use AGENT_NTFY_STORE=file or keychain",
+        "state.keychain.missing": "the security command was not found (the keychain exists only on macOS); on other platforms set NTFY_CONNECTOR_STORE=file (Linux) or dpapi (Windows)",
+        "state.store.bad_env": "NTFY_CONNECTOR_STORE={value} is not a valid choice (only {choices}); leave it unset for the platform default: macOS keychain / Windows DPAPI / 0600 file elsewhere",
+        "state.dpapi.unavailable": "DPAPI is only available on Windows (this platform is {platform}); elsewhere use NTFY_CONNECTOR_STORE=file or keychain",
         "state.dpapi.unprotect_failed": "decrypting topic pool file {path} failed ({error}): only the Windows user who encrypted it can decrypt it, and only on the same machine; after changing account / machine move it away and restart (a new pool is generated; the phone must re-subscribe)",
         "state.slot.bad_name": "invalid slot name: {slot} (expected something like slot1)",
         "state.slot.missing": "slot {slot} does not exist (the pool only has {n})",
@@ -690,9 +690,9 @@ TEXTS: dict[str, dict[str, str]] = {
         "ntfy.http.rate_limited": "{msg}. This is rate limiting, not a code error",
         "daemon_error.bad_lang": "lang must be one of zh / en, got {value}",
         "daemon_error.socket": "cannot listen for IPC: {path}: {error}{hint}",
-        "daemon_error.socket.unix_hint": ". Unix socket paths have a length limit (system-dependent); pick a shorter AGENT_NTFY_HOME",
+        "daemon_error.socket.unix_hint": ". Unix socket paths have a length limit (system-dependent); pick a shorter NTFY_CONNECTOR_HOME",
         "daemon_error.unauthorized": "unauthenticated connection (token mismatch)",
-        "daemon_error.bad_ipc": "AGENT_NTFY_IPC must be unix or tcp: {error}",
+        "daemon_error.bad_ipc": "NTFY_CONNECTOR_IPC must be unix or tcp: {error}",
         "daemon_error.state_init": "state initialisation failed: {error}",
         "daemon_error.already_running": "a daemon is already running ({path} accepts connections); not starting a second one",
         "help.timeout.not_number": "not a number: {text}",

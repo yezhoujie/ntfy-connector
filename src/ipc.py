@@ -1,7 +1,7 @@
 """CLI（客户端）与 daemon（监听端）之间的 IPC 传输：unix domain socket 一种、回环 TCP 一种，
 由 transport() 选定。
 
-AGENT_NTFY_IPC 只在这里读，代码库别处不读这个环境变量。取值 "unix" / "tcp" 原样使用；未设或
+NTFY_CONNECTOR_IPC 只在这里读，代码库别处不读这个环境变量。取值 "unix" / "tcp" 原样使用；未设或
 空串按平台给缺省（Windows 上 "tcp"，因为 socket.AF_UNIX 在那不存在；其余平台 "unix"）；别的值
 raise ValueError，不静默回退。
 
@@ -32,13 +32,13 @@ from pathlib import Path
 import platform_
 
 TRANSPORTS = ("unix", "tcp")
-ENV_VAR = "AGENT_NTFY_IPC"
+ENV_VAR = "NTFY_CONNECTOR_IPC"
 PROBE_TIMEOUT = 1.0
 AF_UNIX: int | None = getattr(socket, "AF_UNIX", None)  # Windows 的 socket 模块没有这个常量：unix 传输在那不可用
 
 
 class BadTransport(ValueError):
-    """AGENT_NTFY_IPC 的值不可用：不是 unix / tcp，或本平台没有 unix 传输。.value 是那个值。"""
+    """NTFY_CONNECTOR_IPC 的值不可用：不是 unix / tcp，或本平台没有 unix 传输。.value 是那个值。"""
 
     def __init__(self, value: str, why: str):
         super().__init__(f"{ENV_VAR}={value!r} {why}")  # 会被嵌进按语言取的文案里：保持 ASCII

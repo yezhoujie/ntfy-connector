@@ -67,7 +67,7 @@ rc=$?
 
 The content fields are written in whatever language you work in; only `lang` controls the wrapper.
 For every other command (`away`, `confirm-sub`, `slots`, `daemon`, …) the wording language is resolved once at
-process start: `--lang zh|en` (a top-level option, before the subcommand) > `AGENT_NTFY_LANG` > the system
+process start: `--lang zh|en` (a top-level option, before the subcommand) > `NTFY_CONNECTOR_LANG` > the system
 locale (a Chinese `LC_ALL` / `LC_MESSAGES` / `LANG`, or a Chinese Windows locale, gives `zh`) > `en`. Panes and
 daemons the CLI starts for you get that resolved language passed along, so pass `--lang` (or set the
 variable) once if the user's shell locale is not what they read in.
@@ -251,7 +251,7 @@ or the user's next phone message lands in the wrong pane.
 
 - The lease holder is the **project** (git toplevel, else the cwd; a worktree or a submodule is its own
   project), so every pane and session in the same project shares one slot and one question at a time.
-  `AGENT_NTFY_TARGET`, if set, names the holder instead. Leases never expire on their own.
+  `NTFY_CONNECTOR_TARGET`, if set, names the holder instead. Leases never expire on their own.
 - The pane the last command ran from is remembered as the injection target; `ask`, `notify`, `slots`,
   `release` (no argument) and `away on|status` refresh it.
 - When your task ends, run `release` (no argument releases this project's slot). `slots` shows the pool.

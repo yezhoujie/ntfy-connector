@@ -36,11 +36,11 @@ notify 的退出码同 ask 的 0 / 1 / 3 / 4（0 = 已发出），没有 2——
 租约主体是项目（git 仓根，否则 cwd）：同一项目里任意窗格 / 会话共用一个槽位。每次跑命令都把本项目租约的
 注入窗格刷新成当前 herdr 窗格（不在 herdr 里 ⇒ 清空，手机消息走「未送达」回执）。卡片 Title 的 [<tag>] 是项目目录名。
 
-环境变量: AGENT_NTFY_HOME（默认 ~/.agent-ntfy）· HERDR_PANE_ID / HERDR_ENV（在 herdr 里时自动带上窗格标识）
-          AGENT_NTFY_TARGET（覆盖租约主体「我是谁」，同一个值复用同一个槽位；herdr 内外都生效）
-          AGENT_NTFY_LANG（固定文案的语言 zh / en；--lang 压过它；ask 的 JSON 里给了 lang 以它为准；都没有就看系统 locale，再缺省 en）
+环境变量: NTFY_CONNECTOR_HOME（默认 ~/.agent-ntfy）· HERDR_PANE_ID / HERDR_ENV（在 herdr 里时自动带上窗格标识）
+          NTFY_CONNECTOR_TARGET（覆盖租约主体「我是谁」，同一个值复用同一个槽位；herdr 内外都生效）
+          NTFY_CONNECTOR_LANG（固定文案的语言 zh / en；--lang 压过它；ask 的 JSON 里给了 lang 以它为准；都没有就看系统 locale，再缺省 en）
 
-固定文案的语言只在这里解析一次（ask：JSON lang → --lang → AGENT_NTFY_LANG → 系统 locale → en；其余子命令从 --lang 起同一条链），
+固定文案的语言只在这里解析一次（ask：JSON lang → --lang → NTFY_CONNECTOR_LANG → 系统 locale → en；其余子命令从 --lang 起同一条链），
 随请求交给 daemon、开窗格 / detach 时用 --lang 带给子进程；深层模块不读环境变量。
 """
 
@@ -65,7 +65,7 @@ import texts
 import validate
 
 PROG = "agent-ntfy"
-HOME = Path(os.environ.get("AGENT_NTFY_HOME", "~/.agent-ntfy")).expanduser()
+HOME = Path(os.environ.get("NTFY_CONNECTOR_HOME", "~/.agent-ntfy")).expanduser()
 DEFAULT_TIMEOUT = 12 * 3600
 EXIT_REPLY, EXIT_INVALID, EXIT_TIMEOUT, EXIT_CHANNEL, EXIT_NEEDS_HUMAN, EXIT_INTERRUPTED = 0, 1, 2, 3, 4, 130
 EXIT_SENT = EXIT_REPLY  # notify 的 0：发出去了（它不等回复）
@@ -93,7 +93,7 @@ class ProtocolError(ValueError):
 
 
 class BadEnvLang(ValueError):
-    """AGENT_NTFY_LANG 给了却不是 zh / en。响亮失败，不静默回退——语言错了整个进程的文案都会错。"""
+    """NTFY_CONNECTOR_LANG 给了却不是 zh / en。响亮失败，不静默回退——语言错了整个进程的文案都会错。"""
 
 
 def _locale_lang() -> str | None:
@@ -111,7 +111,7 @@ def _locale_lang() -> str | None:
 
 
 def resolve_lang(explicit: str | None = None) -> str:
-    """进程入口解析一次：--lang > AGENT_NTFY_LANG > 系统 locale（中文 ⇒ zh）> en。ask / notify 再拿 JSON 里的 lang 压过它。
+    """进程入口解析一次：--lang > NTFY_CONNECTOR_LANG > 系统 locale（中文 ⇒ zh）> en。ask / notify 再拿 JSON 里的 lang 压过它。
     环境变量空串当没给；给了非法值抛 BadEnvLang（--lang 的非法值由 argparse 拦）。"""
     if texts.is_lang(explicit):
         return str(explicit)
@@ -219,7 +219,7 @@ def read_events(sock: socket.socket) -> Iterator[dict]:
 class Identity(NamedTuple):
     """谁在问、往哪注、卡片上标什么。"""
 
-    leased_by: str  # 租约主体：项目 id（proj:<仓根>），AGENT_NTFY_TARGET 可覆盖；同一项目的任何窗格 / 会话共用一个槽位
+    leased_by: str  # 租约主体：项目 id（proj:<仓根>），NTFY_CONNECTOR_TARGET 可覆盖；同一项目的任何窗格 / 会话共用一个槽位
     pane: str | None  # 当前 herdr 窗格：手机消息注入到它；不在 herdr 里就是 None（注入走「未送达」回执）
     tag: str  # 卡片 Title 的 [<tag>]：项目目录名
 
@@ -231,7 +231,7 @@ def identity(root: Path | None = None) -> Identity:
     root 不给就现查；cwd 已被删时 project_root() 抛 OSError，原样抛出——命令入口用 project_root_or_none() 收成人读报错。
     """
     root = root or projstate.project_root()
-    leased_by = os.environ.get("AGENT_NTFY_TARGET") or f"proj:{root}"
+    leased_by = os.environ.get("NTFY_CONNECTOR_TARGET") or f"proj:{root}"
     pane = (os.environ.get("HERDR_PANE_ID") or None) if os.environ.get("HERDR_ENV") else None
     return Identity(leased_by, pane, root.name or leased_by)  # 根目录名为空（/）时退回项目 id
 

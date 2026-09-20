@@ -34,14 +34,14 @@ CWD = object()  # run(root=CWD)：不钉项目根，让 CLI 从真实 cwd 解析
 
 
 def run(argv, stdin_text="", env=None, root=None):
-    """跑 main()，返回 (退出码, stdout, stderr)。缺省把固定文案定成 zh（既有用例断言的都是中文）；env 里给 AGENT_NTFY_LANG 可覆盖。
+    """跑 main()，返回 (退出码, stdout, stderr)。缺省把固定文案定成 zh（既有用例断言的都是中文）；env 里给 NTFY_CONNECTOR_LANG 可覆盖。
 
     项目根缺省钉在一个一次性的临时目录：身份 / tag / 状态文件都以它为准，测试进程落在哪个仓里、那个仓开没开远程模式
     都不影响结果，也不会把那个仓的状态文件改掉。root 给了目录就钉在那；给 CWD 才走真实的 cwd 解析。
     """
     out, errbuf = io.StringIO(), io.StringIO()
-    environ = {k: v for k, v in os.environ.items() if not k.startswith("HERDR_") and k not in ("AGENT_NTFY_LANG", "AGENT_NTFY_TARGET")}
-    environ["AGENT_NTFY_LANG"] = "zh"
+    environ = {k: v for k, v in os.environ.items() if not k.startswith("HERDR_") and k not in ("NTFY_CONNECTOR_LANG", "NTFY_CONNECTOR_TARGET")}
+    environ["NTFY_CONNECTOR_LANG"] = "zh"
     environ.update(env or {})
     with contextlib.ExitStack() as stack:
         stack.enter_context(mock.patch.dict(os.environ, environ, clear=True))
@@ -81,7 +81,7 @@ class IdentityTest(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     def env(self, **extra):
-        base = {k: v for k, v in os.environ.items() if not k.startswith("HERDR_") and k != "AGENT_NTFY_TARGET"}
+        base = {k: v for k, v in os.environ.items() if not k.startswith("HERDR_") and k != "NTFY_CONNECTOR_TARGET"}
         return mock.patch.dict(os.environ, {**base, **extra}, clear=True)
 
     def test_outside_herdr_owner_is_the_project_and_tag_its_dir_name(self):
@@ -102,9 +102,9 @@ class IdentityTest(unittest.TestCase):
             self.assertIsNone(ntfy_connector.identity().pane)
 
     def test_target_override_wins_inside_and_outside_herdr(self):
-        with self.env(AGENT_NTFY_TARGET="my-project"):
+        with self.env(NTFY_CONNECTOR_TARGET="my-project"):
             self.assertEqual(ntfy_connector.identity(), ("my-project", None, self.root.name))
-        with self.env(AGENT_NTFY_TARGET="my-project", **HERDR):
+        with self.env(NTFY_CONNECTOR_TARGET="my-project", **HERDR):
             self.assertEqual(ntfy_connector.identity(), ("my-project", "wD:p1", self.root.name))
 
     def test_tag_falls_back_to_owner_when_root_has_no_name(self):
@@ -388,7 +388,7 @@ class NotifyExitCodesTest(unittest.TestCase):
     # 没有 --timeout：它不等回复（子命令本身在，只是没这个选项）
     def test_no_timeout_option(self):
         out = io.StringIO()
-        with mock.patch.dict(os.environ, {"AGENT_NTFY_LANG": "zh"}), contextlib.redirect_stdout(out), self.assertRaises(SystemExit) as cm:
+        with mock.patch.dict(os.environ, {"NTFY_CONNECTOR_LANG": "zh"}), contextlib.redirect_stdout(out), self.assertRaises(SystemExit) as cm:
             ntfy_connector.main(["notify", "--help"])
         self.assertEqual(cm.exception.code, 0)
         self.assertNotIn("--timeout", out.getvalue())
@@ -465,8 +465,8 @@ class ConfirmSubTest(unittest.TestCase):
         """stdout 当成终端：isatty() 为真（替身，不开伪终端）。返回 (退出码, 终端上打印的文本, stderr)。stdin 给了对象就用它（可做门控）；
         env 里给的键覆盖（HERDR_* 缺省被滤掉，要模拟在窗格里就从这里给）。"""
         tty_out, errbuf = io.StringIO(), io.StringIO()
-        environ = {k: v for k, v in os.environ.items() if not k.startswith("HERDR_") and k != "AGENT_NTFY_LANG"}
-        environ["AGENT_NTFY_LANG"] = "zh"
+        environ = {k: v for k, v in os.environ.items() if not k.startswith("HERDR_") and k != "NTFY_CONNECTOR_LANG"}
+        environ["NTFY_CONNECTOR_LANG"] = "zh"
         environ.update(env or {})
         with mock.patch.dict(os.environ, environ, clear=True), mock.patch("sys.stdin", stdin or io.StringIO(stdin_text)), \
                 mock.patch("sys.stdout", tty_out), mock.patch.object(tty_out, "isatty", return_value=True), contextlib.redirect_stderr(errbuf):
@@ -919,11 +919,11 @@ class ConfirmSubTest(unittest.TestCase):
         self.assertEqual(recorded["kw"]["creationflags"], platform_.DETACHED_PROCESS | platform_.CREATE_NEW_PROCESS_GROUP)
         self.assertNotIn("start_new_session", recorded["kw"])
 
-    # AGENT_NTFY_IPC 给了非法值：每个子命令都在入口响亮退 1 + 人读文案，不是 traceback、不静默回退
+    # NTFY_CONNECTOR_IPC 给了非法值：每个子命令都在入口响亮退 1 + 人读文案，不是 traceback、不静默回退
     def test_invalid_env_ipc_fails_loudly_everywhere(self):
         for argv, stdin in ((["slots"], ""), (["ask"], json.dumps(SAMPLE)), (["daemon", "--status"], ""), (["daemon", "--stop"], ""),
                             (["daemon", "--detach"], ""), (["daemon"], ""), (["release"], "")):
-            code, out, err = run(["--home", "/nonexistent/agent-ntfy-home", *argv], stdin, env={"AGENT_NTFY_IPC": "bogus"})
+            code, out, err = run(["--home", "/nonexistent/agent-ntfy-home", *argv], stdin, env={"NTFY_CONNECTOR_IPC": "bogus"})
             self.assertEqual((code, out), (1, ""), (argv, err))
             self.assertIn("bogus", err)
             self.assertIn("unix / tcp", err)
@@ -1000,16 +1000,16 @@ class HerdrHelpersTest(unittest.TestCase):
         self.assertIn("daemon 没有回应", errbuf.getvalue())
         self.assertIn("消息未发送", errbuf.getvalue())
 
-    # 语言四级解析：--lang > AGENT_NTFY_LANG > 系统 locale（中文 ⇒ zh）> en；只在进程入口解析一次
+    # 语言四级解析：--lang > NTFY_CONNECTOR_LANG > 系统 locale（中文 ⇒ zh）> en；只在进程入口解析一次
     def test_lang_flag_beats_env(self):
         h = Harness(self)
-        code, out, err = run(["--lang", "en", "--home", str(h.home), "daemon", "--status"], env={"AGENT_NTFY_LANG": "zh"})
+        code, out, err = run(["--lang", "en", "--home", str(h.home), "daemon", "--status"], env={"NTFY_CONNECTOR_LANG": "zh"})
         self.assertEqual(code, 0, err)
         self.assertTrue(out.startswith("daemon: pid"), out)
 
     def test_lang_flag_equals_form_and_help(self):
         h = Harness(self)
-        code, out, err = run(["--lang=zh", "--home", str(h.home), "daemon", "--status"], env={"AGENT_NTFY_LANG": "en"})
+        code, out, err = run(["--lang=zh", "--home", str(h.home), "daemon", "--status"], env={"NTFY_CONNECTOR_LANG": "en"})
         self.assertEqual(code, 0, err)
         self.assertTrue(out.startswith("daemon：pid"), out)
         help_out = io.StringIO()
@@ -1030,27 +1030,27 @@ class HerdrHelpersTest(unittest.TestCase):
         h = Harness(self)
         for var in ("LC_ALL", "LC_MESSAGES", "LANG"):
             with self.subTest(var=var):
-                env = {"AGENT_NTFY_LANG": "", "LC_ALL": "", "LC_MESSAGES": "", "LANG": "", var: "zh_CN.UTF-8"}
+                env = {"NTFY_CONNECTOR_LANG": "", "LC_ALL": "", "LC_MESSAGES": "", "LANG": "", var: "zh_CN.UTF-8"}
                 code, out, err = run(["--home", str(h.home), "daemon", "--status"], env=env)
                 self.assertEqual(code, 0, err)
                 self.assertTrue(out.startswith("daemon：pid"), (var, out))
 
     def test_locale_non_zh_falls_back_to_english(self):
         h = Harness(self)
-        env = {"AGENT_NTFY_LANG": "", "LC_ALL": "en_US.UTF-8", "LC_MESSAGES": "zh_CN.UTF-8", "LANG": "zh_CN.UTF-8"}  # LC_ALL 优先
+        env = {"NTFY_CONNECTOR_LANG": "", "LC_ALL": "en_US.UTF-8", "LC_MESSAGES": "zh_CN.UTF-8", "LANG": "zh_CN.UTF-8"}  # LC_ALL 优先
         code, out, err = run(["--home", str(h.home), "daemon", "--status"], env=env)
         self.assertEqual(code, 0, err)
         self.assertTrue(out.startswith("daemon: pid"), out)
-        with mock.patch.dict(os.environ, {"AGENT_NTFY_LANG": "", "LC_ALL": "", "LC_MESSAGES": "", "LANG": ""}), \
+        with mock.patch.dict(os.environ, {"NTFY_CONNECTOR_LANG": "", "LC_ALL": "", "LC_MESSAGES": "", "LANG": ""}), \
                 mock.patch("locale.getlocale", return_value=("Chinese (Simplified)_China", "936")):
             self.assertEqual(ntfy_connector.resolve_lang(), "zh")  # Windows 常没有那三个变量：看 locale.getlocale()
-        with mock.patch.dict(os.environ, {"AGENT_NTFY_LANG": "", "LC_ALL": "", "LC_MESSAGES": "", "LANG": ""}), \
+        with mock.patch.dict(os.environ, {"NTFY_CONNECTOR_LANG": "", "LC_ALL": "", "LC_MESSAGES": "", "LANG": ""}), \
                 mock.patch("locale.getlocale", return_value=(None, None)):
             self.assertEqual(ntfy_connector.resolve_lang(), "en")
 
     def test_env_lang_beats_locale(self):
         h = Harness(self)
-        code, out, err = run(["--home", str(h.home), "daemon", "--status"], env={"AGENT_NTFY_LANG": "en", "LC_ALL": "zh_CN.UTF-8"})
+        code, out, err = run(["--home", str(h.home), "daemon", "--status"], env={"NTFY_CONNECTOR_LANG": "en", "LC_ALL": "zh_CN.UTF-8"})
         self.assertEqual(code, 0, err)
         self.assertTrue(out.startswith("daemon: pid"), out)
 
@@ -1125,7 +1125,7 @@ class ConfirmSubPaneTest(unittest.TestCase):
         h = Harness(self, subscribed=())
         fake = FakeHerdr()
         with mock.patch("ntfy_connector.herdr_run", fake):
-            code, out, err = run(["--home", str(h.home), "confirm-sub", "slot4"], env={**HERDR, "AGENT_NTFY_LANG": "en"})
+            code, out, err = run(["--home", str(h.home), "confirm-sub", "slot4"], env={**HERDR, "NTFY_CONNECTOR_LANG": "en"})
         self.assertEqual(code, 0, err)
         self.assertEqual(ti.split_pane_command(fake.calls[-1][4])[2:4], ["--lang", "en"], fake.calls[-1][4])
         self.assertIn("Tell the user", out)

@@ -19,9 +19,9 @@ topic 名就是密码（公共 ntfy 实例知道名字即可读写、可对本�
 
 密钥层三种实现一个选择：KeychainStore（macOS 钥匙串，按 app 授权）· FileStore（0600 文件，Linux 与兜底）·
 DpapiStore（Windows DPAPI 密文文件）。后两种「只有本用户（与管理员）可读、同一用户下的其它进程也能读」，
-比钥匙串宽——是跨平台时用户要接受的放宽。default_store(home) 按 AGENT_NTFY_STORE > 平台选。
+比钥匙串宽——是跨平台时用户要接受的放宽。default_store(home) 按 NTFY_CONNECTOR_STORE > 平台选。
 
-环境变量: AGENT_NTFY_KEYCHAIN / AGENT_NTFY_TOPIC_PREFIX / AGENT_NTFY_HOME / AGENT_NTFY_STORE（只在 default_store 里读）
+环境变量: NTFY_CONNECTOR_KEYCHAIN / NTFY_CONNECTOR_TOPIC_PREFIX / NTFY_CONNECTOR_HOME / NTFY_CONNECTOR_STORE（只在 default_store 里读）
 """
 
 import json
@@ -40,10 +40,10 @@ from pathlib import Path
 
 import texts
 
-KEYCHAIN_SERVICE = os.environ.get("AGENT_NTFY_KEYCHAIN", "AGENT_NTFY_TOPICS")
+KEYCHAIN_SERVICE = os.environ.get("NTFY_CONNECTOR_KEYCHAIN", "NTFY_CONNECTOR_TOPICS")
 KEYCHAIN_ACCOUNT = "agent-ntfy"  # 钥匙串条目的 -a，只是标识，不参与任何逻辑
-DEFAULT_PREFIX = os.environ.get("AGENT_NTFY_TOPIC_PREFIX", "agent-ntfy")
-HOME_DIR = Path(os.environ.get("AGENT_NTFY_HOME", "~/.agent-ntfy")).expanduser()
+DEFAULT_PREFIX = os.environ.get("NTFY_CONNECTOR_TOPIC_PREFIX", "agent-ntfy")
+HOME_DIR = Path(os.environ.get("NTFY_CONNECTOR_HOME", "~/.agent-ntfy")).expanduser()
 LEASES_PATH = HOME_DIR / "leases.json"
 DEFAULT_POOL_SIZE = 5
 # 小写字母 + 数字，20 位 ≈ 2^103 的熵；不用大写，免得用户在手机上抄 topic 名时分不清大小写
@@ -307,12 +307,12 @@ class DpapiStore(SecretStore):
 
 # ---------------------------------------------------------------- 选择实现
 
-STORE_ENV = "AGENT_NTFY_STORE"
+STORE_ENV = "NTFY_CONNECTOR_STORE"
 STORE_CHOICES = ("keychain", "file", "dpapi")
 
 
 def default_store(home: Path) -> SecretStore:
-    """按 AGENT_NTFY_STORE（keychain / file / dpapi）选实现，非法值响亮报错；不设就按平台：darwin 钥匙串、win32 DPAPI、其余 0600 文件。
+    """按 NTFY_CONNECTOR_STORE（keychain / file / dpapi）选实现，非法值响亮报错；不设就按平台：darwin 钥匙串、win32 DPAPI、其余 0600 文件。
     环境变量只在这里读一次——本模块唯一的例外，且只被 daemon 入口调用。"""
     choice = os.environ.get(STORE_ENV) or None  # 空串当没给
     if choice is None:

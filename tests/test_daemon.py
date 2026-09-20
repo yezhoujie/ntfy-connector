@@ -152,7 +152,7 @@ def wait_until(cond, timeout=5, what="条件"):
 class Harness:
     """临时 home 里起一个 daemon（后台线程），用真实的 IPC 协议与它说话。
 
-    传输跟着环境走（AGENT_NTFY_IPC，由 ipc.transport() 在起 daemon 那一刻决定；缺省 = 平台缺省）：要在别的传输下跑同一批用例，
+    传输跟着环境走（NTFY_CONNECTOR_IPC，由 ipc.transport() 在起 daemon 那一刻决定；缺省 = 平台缺省）：要在别的传输下跑同一批用例，
     用例 setUp 里设环境变量即可。`transport` / `endpoint` 记下这个实例用的传输与端点文件，用例据此断言。
     """
 
@@ -876,7 +876,7 @@ class SubscriptionTest(unittest.TestCase):
         d = daemon.Daemon(deep, client=FakeNtfyClient(), store=MemoryStore())
         with self.assertRaises(daemon.DaemonError) as cm:
             d.run()
-        self.assertIn("AGENT_NTFY_HOME", str(cm.exception))
+        self.assertIn("NTFY_CONNECTOR_HOME", str(cm.exception))
         self.assertFalse((deep / "daemon.pid").exists())
 
     def test_second_daemon_refuses_to_start(self):
@@ -952,7 +952,7 @@ class SubscriptionTest(unittest.TestCase):
         self.assertFalse(ipc.endpoint_path(home).exists())
         self.assertFalse((home / "daemon.pid").exists())
 
-    # 没注入 store 时按 default_store 选实现（AGENT_NTFY_STORE=file ⇒ 池子落在 <home>/topics.json，不碰钥匙串）；
+    # 没注入 store 时按 default_store 选实现（NTFY_CONNECTOR_STORE=file ⇒ 池子落在 <home>/topics.json，不碰钥匙串）；
     # 选了 keychain 而 security 命令不存在 ⇒ 走 StateError 分支（keychain.missing），不能被当成 socket 错误，也不留 socket / pid 残骸
     def test_default_store_selection_and_missing_security_binary(self):
         import shutil
@@ -963,7 +963,7 @@ class SubscriptionTest(unittest.TestCase):
         def no_binary(self_, argv, **kw):
             raise FileNotFoundError(2, "No such file or directory", "security")
 
-        with self.subTest(store="file"), mock.patch.dict(os.environ, {"AGENT_NTFY_STORE": "file"}), mock.patch("state.KeychainStore._run", no_binary):
+        with self.subTest(store="file"), mock.patch.dict(os.environ, {"NTFY_CONNECTOR_STORE": "file"}), mock.patch("state.KeychainStore._run", no_binary):
             client = FakeNtfyClient()
             d = daemon.Daemon(home, client=client, pool_size=2)
             t = threading.Thread(target=d.run, daemon=True)
@@ -977,13 +977,13 @@ class SubscriptionTest(unittest.TestCase):
                 t.join(5)
             self.assertFalse(t.is_alive())
         home2 = home.parent / "h2"
-        with self.subTest(store="keychain"), mock.patch.dict(os.environ, {"AGENT_NTFY_STORE": "keychain"}), mock.patch("state.KeychainStore._run", no_binary):
+        with self.subTest(store="keychain"), mock.patch.dict(os.environ, {"NTFY_CONNECTOR_STORE": "keychain"}), mock.patch("state.KeychainStore._run", no_binary):
             d = daemon.Daemon(home2, client=FakeNtfyClient())
             with self.assertRaises(daemon.DaemonError) as cm:
                 d.run()
             self.assertEqual(cm.exception.key, "state_init")
             self.assertIn("security", str(cm.exception))
-            self.assertIn("AGENT_NTFY_STORE=file", str(cm.exception))
+            self.assertIn("NTFY_CONNECTOR_STORE=file", str(cm.exception))
             self.assertNotIn("socket", str(cm.exception))
             self.assertIn("StateError", (home2 / "daemon.log").read_text(encoding="utf-8"))
             self.assertFalse(ipc.endpoint_path(home2).exists())
@@ -1773,7 +1773,7 @@ class ProtocolSmokeMixin:
     transport = ""
 
     def setUp(self):
-        self.env = mock.patch.dict(os.environ, {"AGENT_NTFY_IPC": self.transport})
+        self.env = mock.patch.dict(os.environ, {"NTFY_CONNECTOR_IPC": self.transport})
         self.env.start()
         self.addCleanup(self.env.stop)  # type: ignore[attr-defined]
 
