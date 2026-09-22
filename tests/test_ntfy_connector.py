@@ -197,7 +197,7 @@ class AskExitCodesTest(unittest.TestCase):
         code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "ask"], json.dumps(SAMPLE))
         self.assertEqual((code, out), (3, ""))
         self.assertIn("消息未发送", err)
-        self.assertIn("ntfy-connector daemon --detach", err)
+        self.assertIn(f"{texts.CLI} daemon --detach", err)
         self.assertIn("herdr", err)
 
     # 3：daemon 中途停了，stderr 写明「已发送但」
@@ -344,7 +344,7 @@ class NotifyExitCodesTest(unittest.TestCase):
         code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "notify"], json.dumps(NOTIFY))
         self.assertEqual((code, out), (3, ""))
         self.assertIn("消息未发送", err)
-        self.assertIn("ntfy-connector daemon --detach", err)
+        self.assertIn(f"{texts.CLI} daemon --detach", err)
         h = Harness(self)
         h.client.fail_publish = "HTTP 429"
         code, out, err = run(["--home", str(h.home), "notify"], json.dumps(NOTIFY), HERDR)
@@ -478,7 +478,7 @@ class ConfirmSubTest(unittest.TestCase):
         code, out, err = run(["--home", str(h.home), "confirm-sub", "slot4", "--timeout", "1"])  # run() 的 stdout 是 StringIO，不是 TTY
         self.assertEqual((code, out), (4, ""))
         self.assertIn("在你自己的终端跑", err)
-        self.assertIn("ntfy-connector confirm-sub slot4", err)
+        self.assertIn(f"{texts.CLI} confirm-sub slot4", err)
         self.assertIn("--subscribed", err)
         for t in h.store.load() or []:
             self.assertNotIn(t, err)
@@ -836,7 +836,7 @@ class ConfirmSubTest(unittest.TestCase):
     def test_commands_without_daemon(self):
         code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "slots"])
         self.assertEqual(code, 3)
-        self.assertIn("ntfy-connector daemon", err)
+        self.assertIn(f"{texts.CLI} daemon", err)
         code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "daemon", "--status"])
         self.assertEqual((code, out), (1, "daemon：未运行\n"))
 
@@ -1137,7 +1137,7 @@ class ConfirmSubPaneTest(unittest.TestCase):
         with mock.patch("ntfy_connector.herdr_run", fake):
             code, out, err = run(["--home", str(h.home), "confirm-sub", "slot4"], env=HERDR)
         self.assertEqual((code, out), (4, ""))
-        self.assertIn("ntfy-connector confirm-sub slot4", err)
+        self.assertIn(f"{texts.CLI} confirm-sub slot4", err)
         self.assertEqual([c[1:3] for c in fake.calls], [["pane", "list"]])
 
     def test_non_tty_split_failure_exits_4(self):
@@ -1147,7 +1147,7 @@ class ConfirmSubPaneTest(unittest.TestCase):
         with mock.patch("ntfy_connector.herdr_run", fake):
             code, out, err = run(["--home", str(h.home), "confirm-sub", "slot4"], env=HERDR)
         self.assertEqual((code, out), (4, ""))
-        self.assertIn("ntfy-connector confirm-sub slot4", err)
+        self.assertIn(f"{texts.CLI} confirm-sub slot4", err)
 
     def test_non_tty_run_failure_after_split_exits_4(self):
         h = Harness(self, subscribed=())
@@ -1156,7 +1156,7 @@ class ConfirmSubPaneTest(unittest.TestCase):
         with mock.patch("ntfy_connector.herdr_run", fake):
             code, out, err = run(["--home", str(h.home), "confirm-sub", "slot4"], env=HERDR)
         self.assertEqual((code, out), (4, ""))
-        self.assertIn("ntfy-connector confirm-sub slot4", err)
+        self.assertIn(f"{texts.CLI} confirm-sub slot4", err)
         self.assertEqual([c[1:3] for c in fake.calls], [["pane", "list"], ["pane", "split"], ["pane", "run"]])
 
     def test_show_topic_and_subscribed_paths_do_not_open_panes(self):
@@ -1231,7 +1231,7 @@ class AwayOnTest(unittest.TestCase):
         h.state.acquire(owner(self.root))
         code, out, err = self.away_on(h.home, env={})
         self.assertEqual((code, out), (4, ""))
-        self.assertIn("ntfy-connector confirm-sub slot1", err)
+        self.assertIn(f"{texts.CLI} confirm-sub slot1", err)
         self.assertFalse((self.root / projstate.DIR_NAME).exists())
         self.assertEqual(self.fake.calls, [])
 

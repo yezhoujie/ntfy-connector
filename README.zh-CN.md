@@ -108,11 +108,16 @@ npx skills add yezhoujie/ntfy-connector
 
 Claude Code 用户也可以用 plugin 方式装：先 `claude plugin marketplace add yezhoujie/agent-remote-communication-skills`，再 `claude plugin install agent-ntfy@agent-remote-communication-skills`。这个 marketplace 由 index 仓（[`agent-remote-communication-skills`](https://github.com/yezhoujie/agent-remote-communication-skills)）维护，本 skill 的内容来自本仓。
 
-CLI 就是目录里的 `scripts/ntfy_connector.py`。它自己的提示文案里管自己叫 `ntfy-connector`；配一个 alias 下面的命令会短很多：
+CLI 就是目录里的 `scripts/ntfy_connector.py`；它自己的提示文案里管自己叫 `ntfy-connector`，但这个短名不会
+被装进 `PATH`——下面命令里写 `ntfy-connector` 的地方，实际要敲：
 
 ```bash
-alias ntfy-connector='python3 "<skill dir>/scripts/ntfy_connector.py"'
+python3 "<skill dir>/scripts/ntfy_connector.py" …        # Windows 用 python 而不是 python3
 ```
+
+`<skill dir>` 看你怎么装的：`-g` 装是 `~/.agents/skills/agent-ntfy`；项目内装是
+`./.agents/skills/agent-ntfy`；Claude Code plugin 装则用 `ls ~/.claude/plugins/cache/*/agent-ntfy/*/scripts/ntfy_connector.py`
+找。嫌敲全路径麻烦，可以自己往 `PATH` 里打个符号链接、或配一个 alias——这是可选的省事办法，不是前置步骤。
 
 ## 4. 你要动手的只有两件事
 
@@ -126,17 +131,17 @@ alias ntfy-connector='python3 "<skill dir>/scripts/ntfy_connector.py"'
 **第 1 步——起 daemon。** 它必须比 agent 活得久，所以自己单独跑：
 
 ```bash
-ntfy-connector daemon --detach        # 任何平台：daemon：已在后台启动，pid 12345（日志 ~/.ntfy-connector/daemon.log）
-ntfy-connector daemon                 # 在 herdr 里：改在一个空闲窗格里前台跑，看得见
-ntfy-connector daemon --status        # daemon：pid 12345  订阅：已连上  等待中的提问：0  确认中：0  槽位：5  传输：unix
+python3 "<skill dir>/scripts/ntfy_connector.py" daemon --detach        # 任何平台：daemon：已在后台启动，pid 12345（日志 ~/.ntfy-connector/daemon.log）
+python3 "<skill dir>/scripts/ntfy_connector.py" daemon                 # 在 herdr 里：改在一个空闲窗格里前台跑，看得见
+python3 "<skill dir>/scripts/ntfy_connector.py" daemon --status        # daemon：pid 12345  订阅：已连上  等待中的提问：0  确认中：0  槽位：5  传输：unix
 ```
 
-这里的路径用 `~` 缩写；CLI 打印的是展开后的绝对路径。`--detach` 若报「daemon（pid 12345）5 秒内还没就绪，仍在启动；稍后用 ntfy-connector daemon --status 看，日志 …」，先看日志——macOS 上可能的原因之一是首次运行时屏幕上有钥匙串授权对话框（池子是经 `security` 命令读的）：答完再跑 `--status`。要看到中文文案，加 `--lang zh`（或设 `NTFY_CONNECTOR_LANG=zh`，或 shell 本身就是中文 locale）：daemon 的语言以启动时解析的为准，之后不再改（由 `away on` 代起时，它会把调用方的语言带过去）。绝不要把 daemon 当作 agent 自己 shell 的后台任务起：agent 一退出它就没了。这一步也可以不手动做：`away on`（§9.1）发现没有 daemon 应答时会自己起一个。
+这里的路径用 `~` 缩写；CLI 打印的是展开后的绝对路径。`--detach` 若报「daemon（pid 12345）5 秒内还没就绪，仍在启动；稍后用 python3 "<skill dir>/scripts/ntfy_connector.py" daemon --status 看，日志 …」，先看日志——macOS 上可能的原因之一是首次运行时屏幕上有钥匙串授权对话框（池子是经 `security` 命令读的）：答完再跑 `--status`。要看到中文文案，加 `--lang zh`（或设 `NTFY_CONNECTOR_LANG=zh`，或 shell 本身就是中文 locale）：daemon 的语言以启动时解析的为准，之后不再改（由 `away on` 代起时，它会把调用方的语言带过去）。绝不要把 daemon 当作 agent 自己 shell 的后台任务起：agent 一退出它就没了。这一步也可以不手动做：`away on`（§9.1）发现没有 daemon 应答时会自己起一个。
 
 **第 2 步——确认手机收得到槽位 1 的通知。** 在你自己的终端跑（别经 agent：它会打印 topic 名，那就是密码）：
 
 ```
-$ ntfy-connector confirm-sub slot1
+$ python3 "<skill dir>/scripts/ntfy_connector.py" confirm-sub slot1
 slot1 的 topic：ntfy-connector-xxxxxxxxxxxxxxxxxxxx
 订阅地址：https://ntfy.sh/ntfy-connector-xxxxxxxxxxxxxxxxxxxx
 在手机 ntfy app 里订阅上面这个 topic；订阅好后按回车，我会发一条带按钮的测试通知——看到它弹出来、点按钮，确认就完成了。
@@ -153,7 +158,7 @@ ntfy-connector: 测试通知已发出，请在手机通知栏点「我收到了�
 **第 3 步——先问自己一个问题**，看一遍来回：
 
 ```bash
-ntfy-connector ask <<'JSON'
+python3 "<skill dir>/scripts/ntfy_connector.py" ask <<'JSON'
 {
   "title":       "测试：吃什么甜点",
   "doing":       "验证 ntfy-connector 能到达这台手机",
@@ -173,21 +178,21 @@ JSON
 
 手机上出现卡片：标题「[<项目目录名>] 测试：吃什么甜点」，然后是加粗的分段标记（【正在做】【背景】【卡点】【选项】【我的建议】【要你定】）、一条横线、末尾提示和一个按钮。选项在 Markdown 源码里写成「1\. 蛋糕（推荐）→ …」「2\. 派 → …」并用空行隔开——点号加了转义，CommonMark 会把它渲染成普通的「1.」，因为 ntfy 的 Android app 会把真正的有序列表渲染成圆点、编号就没了（不渲染 Markdown 的客户端会看到那个反斜杠）。点 **采纳推荐**，终端打印 `蛋糕`；改在 app 的输入框里打「当然是派」，终端就打印 `当然是派`。手机上那张卡片会变成「✅ 已回复 · …」，你的回复在上面、原提问保留在下面。
 
-租约归项目所有（§1）。如果你就是在 agent 将要工作的目录里跑的这次测试，agent 会直接复用 slot1——什么都不用做。如果是在别处跑的，在那里跑一次 `ntfy-connector release`（不带参数就释放当前项目租的槽位）；否则 agent 会拿到 slot2——未确认——再把你拉回第 2 步。
+租约归项目所有（§1）。如果你就是在 agent 将要工作的目录里跑的这次测试，agent 会直接复用 slot1——什么都不用做。如果是在别处跑的，在那里跑一次 `python3 "<skill dir>/scripts/ntfy_connector.py" release`（不带参数就释放当前项目租的槽位）；否则 agent 会拿到 slot2——未确认——再把你拉回第 2 步。
 
 **第 4 步——交给 agent。** 它自己读 SKILL.md。碰到还没确认过的槽位时，它会以退出码 4 失败并请你去跑 `confirm-sub slotN`（第 2 步）——在 herdr 里则是直接替你把那个窗格开好。这是设计，不是 bug：topic 名不能经过 agent 的输出。
 
 **通知。** agent 也可以发一张不需要回答的单向卡片：
 
 ```bash
-ntfy-connector notify <<'JSON'
+python3 "<skill dir>/scripts/ntfy_connector.py" notify <<'JSON'
 {"title": "构建完成", "body": "**测试**：483 条通过。\n\n没有要拍板的事，只是告诉你一声。", "lang": "zh"}
 JSON
 ```
 
 它打印「通知已发到 slot1（用户想回话会以指令形式送达）」并立即返回：无按钮、不等待，退出码 0 已发 · 1 输入不合格 · 3 通道故障 · 4 需要人介入。提问挂着的时候也能发。ntfy app 里**一个 topic 只有一个输入框**、不是每张卡一个：有提问挂着时你发的任何内容都算那个提问的回复；没有提问在等时才注入 agent 的会话（§2）。通知与提问共用同一份 ntfy.sh 配额（§8），所以 SKILL.md 要求 agent 别拿它碎碎念。
 
-**日常维护。** 槽位租出去之后不会自动收回（`ntfy-connector slots` 看谁占着哪个——项目路径、从何时起、哪个窗格——`ntfy-connector release <slot>` 释放）。五个全被占满后 agent 会把占用情况列给你，由你决定：自己去某个项目关掉远程模式，还是让它 `add-slot` 新建。它不会替别的项目释放槽位——这是常态，不是故障。
+**日常维护。** 槽位租出去之后不会自动收回（`python3 "<skill dir>/scripts/ntfy_connector.py" slots` 看谁占着哪个——项目路径、从何时起、哪个窗格——`python3 "<skill dir>/scripts/ntfy_connector.py" release <slot>` 释放）。五个全被占满后 agent 会把占用情况列给你，由你决定：自己去某个项目关掉远程模式，还是让它 `add-slot` 新建。它不会替别的项目释放槽位——这是常态，不是故障。
 
 ## 6. 手机不弹通知怎么办（Android / MIUI 排查清单）
 
@@ -200,7 +205,7 @@ JSON
 - 允许 ntfy **自启动**
 - 允许 ntfy **锁屏通知**
 - ntfy app 里这个 topic **没被静音**，app 自身的通知开关是开的
-- 改完任何一项，跑 `ntfy-connector confirm-sub slotN --again`，等它弹出来再点按钮
+- 改完任何一项，跑 `python3 "<skill dir>/scripts/ntfy_connector.py" confirm-sub slotN --again`，等它弹出来再点按钮
 
 其他 Android ROM 有同样的开关、名字不同；本项目只实测过 MIUI。
 
@@ -251,9 +256,9 @@ JSON
 skill 不决定 agent **什么时候**该往手机问——那是你的策略（写在你 agent 的配置 / 规则里）。skill 给这条策略的是一个开关和一个能读的落点：
 
 ```
-ntfy-connector away on        # 我走了：要拍板的事推到手机
-ntfy-connector away off       # 我回来了
-ntfy-connector away status    # 人读；加 --json 打印原文
+python3 "<skill dir>/scripts/ntfy_connector.py" away on        # 我走了：要拍板的事推到手机
+python3 "<skill dir>/scripts/ntfy_connector.py" away off       # 我回来了
+python3 "<skill dir>/scripts/ntfy_connector.py" away status    # 人读；加 --json 打印原文
 ```
 
 `away on` 是一站式的：没有 daemon 应答就起一个（在 herdr 里开新窗格起，否则用 `--detach`）；当场给本项目租一个槽位——已经租着的就沿用，否则优先空闲的已过闸槽位，再没有就租编号最小的未过闸空闲槽位并接着走确认（在 herdr 里开一个确认窗格、告诉 agent 该让你看哪个窗格，确认结束时窗格会把结果送回 agent 的会话；不在 herdr 里就退 4 并写明要跑的 `confirm-sub` 命令）；这些都成了才在 `<项目根>/.ntfy-connector/` 建目录（项目根 = git 仓根，不在仓里就是当前目录），目录自带 `.gitignore`（内容 `*`，git 看不到它，你仓里的 `.gitignore` 不动），内有 `state.json`：
@@ -377,11 +382,11 @@ npx skills add 'yezhoujie/ntfy-connector#v0.2.0'
 
 **给一台已经跑着 daemon 的机器升级**——按这个顺序：
 
-1. **用你现在手上的 CLI** 停掉正在跑的 daemon：`ntfy-connector daemon --stop`。文件已经换成新版的话，改用 `kill -TERM <pid>`（pid 在 `~/.ntfy-connector/daemon.pid` 里）。原因：从 0.1.0 起 `--stop` 是经 socket 向 daemon 发命令；旧版 daemon 不认这条命令，新版 CLI 会报「没有确认停止」并退 1。
+1. **用你现在手上的 CLI** 停掉正在跑的 daemon：`python3 "<skill dir>/scripts/ntfy_connector.py" daemon --stop`。文件已经换成新版的话，改用 `kill -TERM <pid>`（pid 在 `~/.ntfy-connector/daemon.pid` 里）。原因：从 0.1.0 起 `--stop` 是经 socket 向 daemon 发命令；旧版 daemon 不认这条命令，新版 CLI 会报「没有确认停止」并退 1。
 2. 换文件：`npx skills update`（或再跑一遍安装命令、或拷目录）。
-3. 起新 daemon：`ntfy-connector daemon --detach`，然后 `ntfy-connector daemon --status` 的行尾应有「传输：unix」（Windows 上是 `tcp`）。不管怎样都必须重启：旧版 daemon 会忽略新版 CLI 发的字段。
-4. 跑 `ntfy-connector slots`。0.1.0 之前租下的槽位，持有者显示的是 `wG:p1` 这样的窗格 id 而不是 `proj:<路径>`；用 `NTFY_CONNECTOR_TARGET=<那个持有者> ntfy-connector release <slot>` 释放它们（`release <slot>` 只释放本项目自己的租约；不带参数的 `release` 只找得到当前项目的租约）。
-5. 在 agent 工作的那个 herdr 窗格里跑一次 `ntfy-connector slots`（或 `ask` / `notify` / `away status`），让项目的租约记下这个窗格；手机消息就注入到它。
+3. 起新 daemon：`python3 "<skill dir>/scripts/ntfy_connector.py" daemon --detach`，然后 `python3 "<skill dir>/scripts/ntfy_connector.py" daemon --status` 的行尾应有「传输：unix」（Windows 上是 `tcp`）。不管怎样都必须重启：旧版 daemon 会忽略新版 CLI 发的字段。
+4. 跑 `python3 "<skill dir>/scripts/ntfy_connector.py" slots`。0.1.0 之前租下的槽位，持有者显示的是 `wG:p1` 这样的窗格 id 而不是 `proj:<路径>`；用 `NTFY_CONNECTOR_TARGET=<那个持有者> python3 "<skill dir>/scripts/ntfy_connector.py" release <slot>` 释放它们（`release <slot>` 只释放本项目自己的租约；不带参数的 `release` 只找得到当前项目的租约）。
+5. 在 agent 工作的那个 herdr 窗格里跑一次 `python3 "<skill dir>/scripts/ntfy_connector.py" slots`（或 `ask` / `notify` / `away status`），让项目的租约记下这个窗格；手机消息就注入到它。
 
 0.1.x 各版本之间其余不需要迁移：状态目录布局与 `state.json` 没变，缺省值（`NTFY_CONNECTOR_IPC`、`NTFY_CONNECTOR_STORE`）在 macOS 上就是原来的行为。
 

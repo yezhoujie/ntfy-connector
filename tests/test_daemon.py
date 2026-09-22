@@ -353,7 +353,7 @@ class AskFlowTest(unittest.TestCase):
                                             {"slot": "slot2", "leased_by": "another", "subscribed": False, "active": False}])
         self.assertNotIn("candidates", first)
         self.assertNotIn("release", first["message"])
-        self.assertIn("ntfy-connector add-slot", first["message"])
+        self.assertIn(f"{texts.CLI} add-slot", first["message"])
         self.assertEqual(first["message"], Z("daemon.no_free_slot", n=2))
         sock.close()
 
@@ -1402,7 +1402,7 @@ class ConfirmTest(unittest.TestCase):
         h = Harness(self, subscribed=())
         sock, first, events = h.ask()
         self.assertEqual(first["kind"], "unconfirmed")
-        self.assertIn("请用户在自己的终端跑 ntfy-connector confirm-sub slot1", first["message"])
+        self.assertIn(f"请用户在自己的终端跑 {texts.CLI} confirm-sub slot1", first["message"])
         sock.close()
         h2 = Harness(self, pool_size=1, subscribed=("slot1",))
         h2.state.acquire("someone-else")

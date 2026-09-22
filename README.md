@@ -115,12 +115,18 @@ Any other way of putting `skill/agent-ntfy/` where your agent loads skills works
 
 Claude Code users can install it as a plugin instead: `claude plugin marketplace add yezhoujie/agent-remote-communication-skills` once, then `claude plugin install agent-ntfy@agent-remote-communication-skills`. That marketplace is maintained in the index repository ([`agent-remote-communication-skills`](https://github.com/yezhoujie/agent-remote-communication-skills)); its content for this skill comes from this repository.
 
-The CLI is `scripts/ntfy_connector.py` inside that directory. Its own messages call it `ntfy-connector`; an alias
-makes the commands below shorter:
+The CLI is `scripts/ntfy_connector.py` inside that directory; it calls itself `ntfy-connector` in its own
+messages, but that short name is never on your `PATH` — when the commands below say `ntfy-connector`, run:
 
 ```bash
-alias ntfy-connector='python3 "<skill dir>/scripts/ntfy_connector.py"'
+python3 "<skill dir>/scripts/ntfy_connector.py" …        # Windows: python instead of python3
 ```
+
+`<skill dir>` depends on how you installed it: `~/.agents/skills/agent-ntfy` for a `-g` install,
+`./.agents/skills/agent-ntfy` for a project install, or — installed as a Claude Code plugin — whatever
+`ls ~/.claude/plugins/cache/*/agent-ntfy/*/scripts/ntfy_connector.py` finds. If typing the full path each
+time is too much, put a symlink on your `PATH` or set your own `alias` — an optional extra, not a
+prerequisite for anything below.
 
 ## 4. Your two manual steps
 
@@ -134,17 +140,17 @@ Everything else is automatic: the topic pool is created on first use, the daemon
 **Step 1 — start the daemon.** It must outlive the agent, so it runs on its own:
 
 ```bash
-ntfy-connector daemon --detach        # any platform:  daemon: started in the background, pid 12345 (log ~/.ntfy-connector/daemon.log)
-ntfy-connector daemon                 # inside herdr: run it in a spare pane instead, so it stays visible
-ntfy-connector daemon --status        # daemon: pid 12345  subscription: connected  pending questions: 0  confirming: 0  slots: 5  transport: unix
+python3 "<skill dir>/scripts/ntfy_connector.py" daemon --detach        # any platform:  daemon: started in the background, pid 12345 (log ~/.ntfy-connector/daemon.log)
+python3 "<skill dir>/scripts/ntfy_connector.py" daemon                 # inside herdr: run it in a spare pane instead, so it stays visible
+python3 "<skill dir>/scripts/ntfy_connector.py" daemon --status        # daemon: pid 12345  subscription: connected  pending questions: 0  confirming: 0  slots: 5  transport: unix
 ```
 
-Paths are shown with `~` here; the CLI prints them expanded. If `--detach` reports `daemon (pid 12345) not ready within 5 s, still starting; check later with ntfy-connector daemon --status, log …`, look at the log — one possible cause on macOS is a keychain dialog on screen on first run (the pool is read through the `security` command): answer it, then check `--status`. Want Chinese wording? Pass `--lang zh` (or set `NTFY_CONNECTOR_LANG=zh`, or just have a Chinese shell locale): the daemon keeps the language it was started with (when `away on` starts it for you, it passes the caller's language along). Never start the daemon as a background job of the agent's own shell: it would die with the agent. You do not have to do this step by hand: `away on` (§9.1) starts the daemon when none answers.
+Paths are shown with `~` here; the CLI prints them expanded. If `--detach` reports `daemon (pid 12345) not ready within 5 s, still starting; check later with python3 "<skill dir>/scripts/ntfy_connector.py" daemon --status, log …`, look at the log — one possible cause on macOS is a keychain dialog on screen on first run (the pool is read through the `security` command): answer it, then check `--status`. Want Chinese wording? Pass `--lang zh` (or set `NTFY_CONNECTOR_LANG=zh`, or just have a Chinese shell locale): the daemon keeps the language it was started with (when `away on` starts it for you, it passes the caller's language along). Never start the daemon as a background job of the agent's own shell: it would die with the agent. You do not have to do this step by hand: `away on` (§9.1) starts the daemon when none answers.
 
 **Step 2 — confirm that your phone gets notifications for slot 1.** Run this in your own terminal (not through the agent: it prints the topic name, which is the password):
 
 ```
-$ ntfy-connector confirm-sub slot1
+$ python3 "<skill dir>/scripts/ntfy_connector.py" confirm-sub slot1
 topic for slot1: ntfy-connector-xxxxxxxxxxxxxxxxxxxx
 subscribe URL: https://ntfy.sh/ntfy-connector-xxxxxxxxxxxxxxxxxxxx
 Subscribe to the topic above in the ntfy app on your phone. Once subscribed, press Enter and I'll send a test notification with a button — when it pops up, tap the button and the check is done.
@@ -161,7 +167,7 @@ Only the tap counts, and it must be the notification that popped up — tapping 
 **Step 3 — ask yourself a question**, to see the round trip:
 
 ```bash
-ntfy-connector ask <<'JSON'
+python3 "<skill dir>/scripts/ntfy_connector.py" ask <<'JSON'
 {
   "title":       "Test: which dessert",
   "doing":       "Checking that ntfy-connector reaches this phone",
@@ -181,21 +187,21 @@ JSON
 
 The phone shows the card: title `[<project dir>] Test: which dessert`, then bold section labels (`[Doing]`, `[Background]`, `[Blocker]`, `[Options]`, `[My recommendation]`, `[Your call]`), a rule, the closing hint and one button. The options are numbered `1\. Cake (recommended) → …` / `2\. Pie → …` in the Markdown source and separated by blank lines — an escaped period, which CommonMark renders as a plain `1.`, because the ntfy Android app turns a real ordered list into bullets and the numbers disappear (a client that does not render Markdown shows the backslash). Tap **Accept recommended** and the terminal prints `Cake`; type `pie, obviously` in the app's reply box instead and it prints `pie, obviously`. The card on the phone turns into `✅ Answered · …` with your reply on top and the question kept below it.
 
-Leases belong to the project (§1). If you ran this test inside the directory your agent will work in, the agent simply reuses slot1 — nothing to do. If you ran it elsewhere, run `ntfy-connector release` there (no argument releases the slot leased by the current project); otherwise the agent would be handed slot2 — unconfirmed — and send you back to step 2 for it.
+Leases belong to the project (§1). If you ran this test inside the directory your agent will work in, the agent simply reuses slot1 — nothing to do. If you ran it elsewhere, run `python3 "<skill dir>/scripts/ntfy_connector.py" release` there (no argument releases the slot leased by the current project); otherwise the agent would be handed slot2 — unconfirmed — and send you back to step 2 for it.
 
 **Step 4 — hand it to the agent.** It reads SKILL.md on its own. When it hits a slot that is not confirmed yet, it exits with code 4 and asks you to run `confirm-sub slotN` (step 2) — inside herdr it opens that pane for you instead. That is the design, not a bug: the topic name must not pass through the agent's output.
 
 **Notifications.** The agent can also send a one-way card that needs no answer:
 
 ```bash
-ntfy-connector notify <<'JSON'
+python3 "<skill dir>/scripts/ntfy_connector.py" notify <<'JSON'
 {"title": "Build finished", "body": "**Tests**: 483 passed.\n\nNothing to decide; just so you know.", "lang": "en"}
 JSON
 ```
 
 It prints `notification sent on slot1 (if the user replies, it arrives as an instruction)` and returns at once: no button, no waiting, exit codes 0 sent · 1 invalid input · 3 channel failure · 4 a human must act. It is allowed while a question is pending. The ntfy app has **one reply box per topic**, not per card: whatever you send while a question is pending is that question's reply; when nothing is pending it is injected into the agent's session (§2). Notifications count against the same ntfy.sh quota as questions (§8), so the agent is told not to chatter.
 
-**Housekeeping.** Slots are leased until released (`ntfy-connector slots` to see who holds what — the project path, since when, and the pane — and `ntfy-connector release <slot>` to free one). Once all five are taken the agent shows you who holds what and you decide: turn remote mode off in one of those projects yourself, or let it `add-slot`. It never releases another project's slot; that is normal steady state.
+**Housekeeping.** Slots are leased until released (`python3 "<skill dir>/scripts/ntfy_connector.py" slots` to see who holds what — the project path, since when, and the pane — and `python3 "<skill dir>/scripts/ntfy_connector.py" release <slot>` to free one). Once all five are taken the agent shows you who holds what and you decide: turn remote mode off in one of those projects yourself, or let it `add-slot`. It never releases another project's slot; that is normal steady state.
 
 ## 6. If nothing pops up on the phone (Android / MIUI checklist)
 
@@ -213,7 +219,7 @@ Go through every line, they are independent:
 - **Autostart** allowed for ntfy
 - **Lock-screen notifications** allowed for ntfy
 - In the ntfy app, the topic is **not muted** and the app's own notification setting is on
-- After changing anything, run `ntfy-connector confirm-sub slotN --again` and wait for the pop-up before tapping
+- After changing anything, run `python3 "<skill dir>/scripts/ntfy_connector.py" confirm-sub slotN --again` and wait for the pop-up before tapping
 
 Other Android ROMs have the same switches under different names; only MIUI has been tested.
 
@@ -265,9 +271,9 @@ The skill does not decide *when* the agent should ask on the phone; that is your
 your agent's configuration). What the skill gives that policy is a switch and a place to read it:
 
 ```
-ntfy-connector away on        # you are leaving: decisions should go to the phone
-ntfy-connector away off       # you are back
-ntfy-connector away status    # in words; add --json for the raw file
+python3 "<skill dir>/scripts/ntfy_connector.py" away on        # you are leaving: decisions should go to the phone
+python3 "<skill dir>/scripts/ntfy_connector.py" away off       # you are back
+python3 "<skill dir>/scripts/ntfy_connector.py" away status    # in words; add --json for the raw file
 ```
 
 `away on` is a one-stop command. It starts the daemon if none answers (inside herdr in a new pane, otherwise with `--detach`), leases a slot for the project on the spot — the one it already holds, else a confirmed idle slot, else the lowest unconfirmed idle slot, which it then sends through the reachability check (inside herdr it opens a confirmation pane, tells the agent which pane you should look at, and the pane sends the result back into the agent's session when the check ends; outside herdr it exits 4 and names the `confirm-sub` command to run) — and only then creates `<project root>/.ntfy-connector/` (project root = the git toplevel, else the current directory) with a self-ignoring `.gitignore` and a `state.json`:
@@ -413,11 +419,11 @@ npx skills add 'yezhoujie/ntfy-connector#v0.2.0'
 
 **Upgrading a machine that already runs a daemon** — do the steps in this order:
 
-1. Stop the running daemon **with the CLI you have now**: `ntfy-connector daemon --stop`. If you already replaced the files, send it `kill -TERM <pid>` instead (the pid is in `~/.ntfy-connector/daemon.pid`). Reason: since 0.1.0 `--stop` asks the daemon over its socket; a daemon from an earlier version does not know that command, so the new CLI reports `did not acknowledge the stop` and exits 1.
+1. Stop the running daemon **with the CLI you have now**: `python3 "<skill dir>/scripts/ntfy_connector.py" daemon --stop`. If you already replaced the files, send it `kill -TERM <pid>` instead (the pid is in `~/.ntfy-connector/daemon.pid`). Reason: since 0.1.0 `--stop` asks the daemon over its socket; a daemon from an earlier version does not know that command, so the new CLI reports `did not acknowledge the stop` and exits 1.
 2. Update the files: `npx skills update` (or run the install command again, or copy the directory).
-3. Start the new daemon: `ntfy-connector daemon --detach`, then `ntfy-connector daemon --status` should show `transport: unix` (or `tcp` on Windows). A restart is required in any case: an earlier daemon ignores the fields the new CLI sends.
-4. Run `ntfy-connector slots`. Leases taken before 0.1.0 show a pane id such as `wG:p1` as holder instead of `proj:<path>`; free them with `NTFY_CONNECTOR_TARGET=<that holder> ntfy-connector release <slot>` (`release <slot>` only releases your own project's lease; `release` without argument only finds the current project's lease).
-5. In the herdr pane your agent works in, run `ntfy-connector slots` (or `ask` / `notify` / `away status`) so the project's lease records that pane; phone messages are injected there.
+3. Start the new daemon: `python3 "<skill dir>/scripts/ntfy_connector.py" daemon --detach`, then `python3 "<skill dir>/scripts/ntfy_connector.py" daemon --status` should show `transport: unix` (or `tcp` on Windows). A restart is required in any case: an earlier daemon ignores the fields the new CLI sends.
+4. Run `python3 "<skill dir>/scripts/ntfy_connector.py" slots`. Leases taken before 0.1.0 show a pane id such as `wG:p1` as holder instead of `proj:<path>`; free them with `NTFY_CONNECTOR_TARGET=<that holder> python3 "<skill dir>/scripts/ntfy_connector.py" release <slot>` (`release <slot>` only releases your own project's lease; `release` without argument only finds the current project's lease).
+5. In the herdr pane your agent works in, run `python3 "<skill dir>/scripts/ntfy_connector.py" slots` (or `ask` / `notify` / `away status`) so the project's lease records that pane; phone messages are injected there.
 
 Between 0.1.x releases nothing else migrates: the state directory layout and `state.json` are unchanged, and the defaults (`NTFY_CONNECTOR_IPC`, `NTFY_CONNECTOR_STORE`) reproduce the previous behaviour on macOS.
 
