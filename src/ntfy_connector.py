@@ -53,7 +53,7 @@ import socket
 import subprocess
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import NamedTuple
 
@@ -743,7 +743,19 @@ def away_on(home: Path, root: Path, lang: str) -> int:
             return EXIT_NEEDS_HUMAN  # 租约留着（人在键盘旁，跑完 confirm-sub 再 away on 就是它）；开关不写
     projstate.save(root, away=True, slot=slot, confirmed=subscribed, target=ident.leased_by)
     print(texts.t("cli.away.path", lang, path=projstate.state_path(root)))
+    _warn_if_daemon_has_no_herdr(home, lang)
     return 0
+
+
+def _warn_if_daemon_has_no_herdr(home: Path, lang: str) -> None:
+    """远程模式刚开起来：这台 agent 在 herdr 里，却是 daemon 自己 PATH 上找不到 herdr（多半装机顺序反了）——
+    手机消息这就送不到，让 agent 知道该重启 daemon。只在这一种组合下才值得说：不在 herdr 里没处重启，
+    也没有窗格可指给它看。退出码不受影响：远程模式已经开成了，这只是一句诊断。"""
+    if os.environ.get("HERDR_ENV") != "1":
+        return
+    status = probe(home)
+    if status is not None and status.get("herdr", {}).get("bin") is None:
+        err(texts.t("cli.away.daemon_no_herdr", lang))
 
 
 # ---------------------------------------------------------------- daemon 的起停
@@ -774,6 +786,17 @@ def _stale_pid(home: Path) -> int | None:
         return None
 
 
+def _herdr_status_line(view: dict, lang: str) -> str:
+    """`daemon --status` 多打的那一行：daemon 自己视角的 herdr（它自己启动那一刻的 PATH 快照，不是本机现在的）。"""
+    if view.get("bin") is None:
+        return texts.t("cli.status.herdr.missing", lang)
+    if view.get("reachable"):
+        return texts.t("cli.status.herdr.ok", lang, bin=view["bin"])
+    # herdr_view() 的自己进程内调用永远给 error 一个非空值；这条 view 是跨 IPC 收到的一份 JSON，
+    # 保留 "?" 兜底防的是版本不一致的 daemon（它自己的 herdr_view 实现变了）越过这份契约传回空值
+    return texts.t("cli.status.herdr.unreachable", lang, bin=view["bin"], error=view.get("error") or "?")
+
+
 def daemon_status(home: Path, lang: str) -> int:
     ev = probe(home)
     if ev is None:
@@ -788,6 +811,9 @@ def daemon_status(home: Path, lang: str) -> int:
         sub = texts.t("cli.status.sub.disconnected", lang, seconds=ev["disconnected_for"])
     line = texts.t("cli.status.line", lang, pid=ev["pid"], sub=sub, pending=ev["pending"], confirming=ev.get("confirming", 0), pool=ev["pool"])
     print(line + (texts.t("cli.status.transport", lang, transport=ev["transport"]) if ev.get("transport") else ""))
+    herdr_ev = ev.get("herdr")  # 旧形态 / 被换掉的 probe 返回值可能没有这个键：没有就不打这一行，不崩
+    if herdr_ev:
+        print(_herdr_status_line(herdr_ev, lang))
     return 0
 
 
@@ -819,10 +845,33 @@ def probe(home: Path, *, timeout: float | None = None) -> dict | None:
     return ipc.probe(home, timeout=PROBE_TIMEOUT if timeout is None else timeout)
 
 
+def _daemon_env(env: Mapping[str, str] | None = None) -> dict[str, str] | None:
+    """给 _spawn_daemon 用的一份补过 PATH 的 env；None 表示不覆盖，沿用今天的继承行为。
+
+    只在这一种情形下补：起点这一刻在 herdr 里，且 herdr 自己把 HERDR_BIN_PATH（它自身可执行文件的完整路径）
+    带进了这个 pane 的 shell，而它所在的目录还不在当前 PATH 里——这正是「daemon 比 herdr 先启动」那种装机
+    顺序留下的洞：等 herdr 装好、从有它的这个 pane 里重新起 daemon 时，让新起的这个补上目录，往后就找得到了。
+    """
+    e = os.environ if env is None else env
+    if e.get("HERDR_ENV") != "1":
+        return None
+    bin_path = e.get("HERDR_BIN_PATH")
+    if not bin_path:
+        return None
+    directory = os.path.dirname(bin_path)
+    if not directory:
+        return None
+    path = e.get("PATH", "")
+    if directory in path.split(os.pathsep):
+        return None
+    return {**e, "PATH": f"{directory}{os.pathsep}{path}" if path else directory}
+
+
 def _spawn_daemon(home: Path, lang: str) -> subprocess.Popen:
     """脱离会话 / 控制台起 daemon（怎么脱离由平台层定），stdio 全接空设备。语言用 --lang 显式带过去（调用方已解析过，
     子进程不必再看环境 / locale）。--lang 与 --home 都是顶层选项，必须放在子命令前面。"""
-    return platform_.spawn_detached([sys.executable, os.path.abspath(__file__), "--lang", lang, "--home", str(home), "daemon"])
+    return platform_.spawn_detached([sys.executable, os.path.abspath(__file__), "--lang", lang, "--home", str(home), "daemon"],
+                                     env=_daemon_env())
 
 
 def daemon_detach(home: Path, lang: str) -> int:

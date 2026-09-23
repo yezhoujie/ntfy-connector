@@ -10,6 +10,7 @@ import re
 import shlex
 import subprocess
 import sys
+import tempfile
 import unittest
 
 import inject
@@ -440,6 +441,89 @@ class RunHerdrTest(unittest.TestCase):
         r = HerdrResult(rc=1, stdout="", stderr=herdr_error("agent:prompt", "agent_blocked"))
         self.assertEqual(r.error_code(), "agent_blocked")
         self.assertEqual(r.summary("zh"), "agent_blocked")
+
+
+class FindHerdrOnPathTest(unittest.TestCase):
+    """daemon 自己 PATH 快照上找不找得到 herdr：纯函数，env / platform 都可注入，不看本机真实平台。"""
+
+    def test_directory_without_the_binary_returns_none(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertIsNone(inject.find_herdr_on_path({"PATH": d}, platform="linux"))
+
+    def test_empty_path_returns_none(self):
+        self.assertIsNone(inject.find_herdr_on_path({"PATH": ""}, platform="linux"))
+
+    @unittest.skipIf(sys.platform == "win32", "可执行位是 POSIX 概念，Windows 主机上 chmod 不生效")
+    def test_finds_the_executable_on_a_constructed_path(self):
+        with tempfile.TemporaryDirectory() as d:
+            candidate = os.path.join(d, "herdr")
+            open(candidate, "w").close()
+            os.chmod(candidate, 0o755)
+            self.assertEqual(inject.find_herdr_on_path({"PATH": d}, platform="linux"), candidate)
+
+    @unittest.skipIf(sys.platform == "win32", "可执行位是 POSIX 概念，Windows 主机上 chmod 不生效")
+    def test_non_executable_file_is_not_a_match(self):
+        with tempfile.TemporaryDirectory() as d:
+            candidate = os.path.join(d, "herdr")
+            open(candidate, "w").close()
+            os.chmod(candidate, 0o644)
+            self.assertIsNone(inject.find_herdr_on_path({"PATH": d}, platform="linux"))
+
+    def test_win32_matches_via_pathext_in_the_second_path_entry(self):
+        # 按注入平台（win32）的分隔符拼多段 PATH，目标在第二段；win32 分支不查可执行位，任何宿主上都能用真实文件验证
+        with tempfile.TemporaryDirectory() as empty_dir, tempfile.TemporaryDirectory() as target_dir:
+            open(os.path.join(target_dir, "herdr.CMD"), "w").close()
+            found = inject.find_herdr_on_path({"PATH": f"{empty_dir};{target_dir}"}, platform="win32")
+            self.assertEqual(found, os.path.join(target_dir, "herdr.CMD"))
+
+
+class HerdrViewTest(unittest.TestCase):
+    """daemon 自己视角的 herdr：PATH 上有没有、有的话应不应答。posix 用真实可执行文件；win32 不查可执行位所以不需要。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.bin_path = os.path.join(self.tmp.name, "herdr")
+        open(self.bin_path, "w").close()
+        if sys.platform != "win32":
+            os.chmod(self.bin_path, 0o755)
+        self.env = {"PATH": self.tmp.name}
+
+    def test_bin_none_short_circuits_without_running_anything(self):
+        calls = []
+
+        def run(argv):
+            calls.append(argv)
+            return HerdrResult(rc=0, stdout=PANES_STDOUT, stderr="")
+
+        result = inject.herdr_view(run=run, env={"PATH": ""}, platform="linux")
+        self.assertEqual(result, {"bin": None, "reachable": False, "error": "not found on PATH"})
+        self.assertEqual(calls, [])  # bin 都没有就不必再跑子进程
+
+    @unittest.skipIf(sys.platform == "win32", "可执行位是 POSIX 概念，Windows 主机上 chmod 不生效")
+    def test_reachable_when_pane_list_parses(self):
+        result = inject.herdr_view(run=lambda argv: HerdrResult(rc=0, stdout=PANES_STDOUT, stderr=""), env=self.env, platform="linux")
+        self.assertEqual(result, {"bin": self.bin_path, "reachable": True, "error": None})
+
+    @unittest.skipIf(sys.platform == "win32", "可执行位是 POSIX 概念，Windows 主机上 chmod 不生效")
+    def test_envelope_error_is_the_code(self):
+        stderr = herdr_error("pane:list", "server_not_running", "no herdr server is running at /x")
+        result = inject.herdr_view(run=lambda argv: HerdrResult(rc=1, stdout="", stderr=stderr), env=self.env, platform="linux")
+        self.assertEqual(result, {"bin": self.bin_path, "reachable": False, "error": "server_not_running"})
+
+    @unittest.skipIf(sys.platform == "win32", "可执行位是 POSIX 概念，Windows 主机上 chmod 不生效")
+    def test_non_envelope_failure_uses_the_real_message_not_an_internal_label(self):
+        # stderr 不是 JSON（用法错误一类）：真实报文本身就是最有信息量的诊断，不能被内部标签盖掉
+        result = inject.herdr_view(run=lambda argv: HerdrResult(rc=2, stdout="", stderr="unknown option --frobnicate"),
+                                    env=self.env, platform="linux")
+        self.assertEqual(result, {"bin": self.bin_path, "reachable": False, "error": "unknown option --frobnicate"})
+
+    @unittest.skipIf(sys.platform == "win32", "可执行位是 POSIX 概念，Windows 主机上 chmod 不生效")
+    def test_empty_output_still_yields_a_non_empty_error(self):
+        result = inject.herdr_view(run=lambda argv: HerdrResult(rc=1, stdout="", stderr=""), env=self.env, platform="linux")
+        self.assertEqual(result["bin"], self.bin_path)
+        self.assertFalse(result["reachable"])
+        self.assertTrue(result["error"])
 
 
 if __name__ == "__main__":

@@ -78,6 +78,11 @@ agent ──ask（stdin 里的 JSON）──▶ ntfy-connector ──本机 sock
 
 为什么非 herdr 不可：注入就是往目标 agent 的终端（PTY）里写一行文本，`herdr agent prompt` 是对任何 agent CLI 都通用的唯一办法；本 skill 没有别的兜底机制。
 
+daemon 找 herdr 靠的是自己的 PATH，而那是它启动那一刻的快照——如果装 herdr 是在 daemon 已经跑起来之后，
+它不会自动看见，得从一个 PATH 上有 herdr 的窗格里重启它才行（`daemon --stop`，再 `away on` 一次；这种
+情形下 `away on` 自己会在 stderr 打一句警告，agent 应当据此处理）。`daemon --status` 现在会多打一行
+daemon 自己视角的 herdr，与这台机器当下的状态是两回事。
+
 ### 2.2 iPhone：用 ntfy 网页版，不用 App Store 里的 app
 
 ntfy 的 iOS app 能收通知，但**没有输入框**：不能在 topic 里打字，于是既不能用按钮以外的方式回答提问，也不能主动给 agent

@@ -82,6 +82,12 @@ Such a message is never dropped silently. The daemon answers on the phone with a
 
 Why herdr and nothing else: injecting means writing a line of text into the target agent's terminal (its PTY), and `herdr agent prompt` is the one generic way to do that for any agent CLI; this skill has no fallback mechanism.
 
+The daemon finds herdr on its own PATH, which is a snapshot taken when it started — if you install herdr
+*after* the daemon is already running, it will not see it until it is restarted from a pane that has herdr
+on its PATH (`daemon --stop`, then `away on` again; `away on` itself warns on stderr when this is the case,
+and the agent is expected to act on it). `daemon --status` now shows a line for the daemon's own view of
+herdr, separate from whatever this machine currently has.
+
 ### 2.2 iPhone: use the ntfy web app, not the App Store app
 
 The ntfy iOS app receives notifications, but it has **no reply box**: you cannot type a message in a topic,

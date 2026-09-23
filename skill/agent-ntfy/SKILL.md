@@ -225,6 +225,13 @@ to the user**; the outcomes are:
   show the user that occupancy and let *them* decide: turn remote mode off in one of those projects (which
   releases its slot), or `add-slot` and run `away on` again. **Never release another project's slot** —
   `release <slot>` refuses it (rc 4); a lease is that project's until its own `away off` / `release`.
+- If stderr also contains `warning: the daemon cannot find herdr on its PATH` (this can appear alongside any
+  of the outcomes above — remote mode is still on, the exit code is still 0): the daemon was started before
+  herdr was installed, so it never picked it up, and phone messages have nowhere to go until it is restarted
+  from a pane that has herdr — which is the one you are in. Run
+  `python3 <skill dir>/scripts/ntfy_connector.py daemon --stop` yourself; if it fails or is refused, relay
+  that stderr to the user and wait for them to decide; if it stops cleanly, run `away on` again and tell the
+  user the daemon has been restarted and phone messages can now be delivered.
 
 The switch and the current slot live in `<project root>/.ntfy-connector/state.json` (project root = the git
 toplevel, else the cwd), written by `away on|off` and refreshed by `ask` / `notify` / `confirm-sub` /

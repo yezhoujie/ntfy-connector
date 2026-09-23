@@ -171,7 +171,10 @@ class Harness:
             self.state.mark_subscribed(slot)
         self.client = FakeNtfyClient()
         self.herdr = kw.pop("herdr", None) or FakeHerdr()  # 替身：任何用例都不许碰真 herdr（往活着的 pane 注会打扰它）
-        self.daemon = daemon.Daemon(self.home, client=self.client, store=self.store, pool_size=pool_size, herdr=self.herdr, lang=lang, **kw)  # 显式 zh：既有用例断言的都是中文文案
+        # 同样是替身：不给就报「找到了、能通」，不让 status 的结果随测试宿主真实 PATH 上有没有装 herdr 而变
+        herdr_view = kw.pop("herdr_view", None) or (lambda: {"bin": "/usr/local/bin/herdr", "reachable": True, "error": None})
+        self.daemon = daemon.Daemon(self.home, client=self.client, store=self.store, pool_size=pool_size, herdr=self.herdr,
+                                     herdr_view=herdr_view, lang=lang, **kw)  # 显式 zh：既有用例断言的都是中文文案
         self.thread = threading.Thread(target=self.daemon.run, daemon=True)
         self.thread.start()
         case.addCleanup(self.stop)
@@ -703,6 +706,13 @@ class CommandsTest(unittest.TestCase):
     def test_status_reports_transport(self):
         h = Harness(self)
         self.assertEqual(h.request(cmd="status")[0]["transport"], h.transport)
+
+    # status 事件带 daemon 自己视角的 herdr：这里只验证 _status() 原样透出注入的那份；
+    # find_herdr_on_path / herdr_view 本身的行为在 test_inject.py 单独测，不在这里重复用真实 PATH
+    def test_status_reports_the_injected_herdr_view(self):
+        view = {"bin": None, "reachable": False, "error": "not found on PATH"}
+        h = Harness(self, herdr_view=lambda: view)
+        self.assertEqual(h.request(cmd="status")[0]["herdr"], view)
 
     # stop 命令：回 stopping（带 pid）后走正常收尾——pending 收到 daemon_stopping、文件删干净；这是三平台统一的停机路径
     def test_stop_command_replies_stopping_then_shuts_down_cleanly(self):

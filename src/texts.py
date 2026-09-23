@@ -71,7 +71,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "receipt.stopping_uncertain": "daemon 正在停止，无法确认你刚才的消息是否送达，请稍后再发。",
         "receipt.superseded": "同一槽位有了新的回执，请看最新那条。",
         "herdr.timeout": "herdr {seconds} 秒无响应",
-        "herdr.missing": "herdr 没装或不在 PATH 上",
+        "herdr.missing": "herdr 没装或不在 PATH 上；daemon 多半比 herdr 先启动，请在 herdr 窗格里重启它：{cli} daemon --stop，再 {cli} away on",
         "herdr.rc": "退出码 {rc}",
         # ---- 控制按钮的结果
         "control.released": "槽位 {slot} 已释放，可以租给下一个目标。",
@@ -187,6 +187,9 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.away.daemon_failed": "daemon 没有起来（{seconds} 秒内探不到），远程交互模式未开启；看日志 {log}",
         "cli.away.unwritable": "状态目录 {path} 不可写（已存在但不是目录，或没有写权限）",
         "cli.away.pane_failed": "在 herdr 里开不出窗格（或命令没敲进去），daemon 没有起来，远程交互模式未开启；请在终端跑 {cli} daemon --detach 后重试",
+        # agent 读的诊断，不是给人看的：两栏故意同一句英文，不随 --lang 变
+        "cli.away.daemon_no_herdr": ("warning: the daemon cannot find herdr on its PATH (was it started before herdr was installed?). "
+                                     "Phone messages cannot be delivered until it is restarted from a herdr pane: {cli} daemon --stop, then {cli} away on"),
         "cli.slots.pane": "  窗格 {pane}",
         "cli.project.unresolved": "定不出当前项目（{error}）；换到一个存在的目录再跑",
         "cli.reminder": "提醒：{message}",
@@ -252,6 +255,9 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.status.sub.connecting": "连接中",
         "cli.status.sub.disconnected": "断开 {seconds} 秒",
         "cli.status.line": "daemon：pid {pid}  订阅：{sub}  等待中的提问：{pending}  确认中：{confirming}  槽位：{pool}",
+        "cli.status.herdr.ok": "herdr（daemon 视角）：可达，路径 {bin}",
+        "cli.status.herdr.unreachable": "herdr（daemon 视角）：{bin} 在，但没有应答（{error}）",
+        "cli.status.herdr.missing": "herdr（daemon 视角）：不在 daemon 的 PATH 上——请在 herdr 窗格里重启它：{cli} daemon --stop，再 {cli} away on",
         "cli.stop.no_ack": "daemon（pid {pid}）没有确认停止（{other}）；请手动核实",
         "cli.stop.no_response": "无回应",
         "cli.stop.done": "daemon：pid {pid} 已停",
@@ -431,7 +437,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "receipt.stopping_uncertain": "The daemon is stopping; can't tell whether your message was delivered. Please resend later.",
         "receipt.superseded": "This slot has a newer receipt — see the latest one.",
         "herdr.timeout": "herdr gave no response within {seconds} s",
-        "herdr.missing": "herdr is not installed or not on PATH",
+        "herdr.missing": "herdr is not installed or not on PATH; the daemon was probably started before herdr was installed — restart it from a herdr pane: {cli} daemon --stop, then {cli} away on",
         "herdr.rc": "exit code {rc}",
         "control.released": "Slot {slot} released; it can be leased to the next target.",
         "control.busy_active": "Slot {slot} is in use (a question is waiting for a reply); not released.",
@@ -541,6 +547,9 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.away.daemon_failed": "the daemon did not come up (not reachable within {seconds} s); remote mode NOT enabled. See the log {log}",
         "cli.away.unwritable": "state directory {path} is not writable (exists but is not a directory, or no write permission)",
         "cli.away.pane_failed": "could not open a herdr pane (or the command did not get typed in); the daemon was not started and remote mode is NOT enabled. Run {cli} daemon --detach in a terminal, then retry",
+        # agent-facing diagnostic, not user-facing: deliberately identical in both columns, does not change with --lang
+        "cli.away.daemon_no_herdr": ("warning: the daemon cannot find herdr on its PATH (was it started before herdr was installed?). "
+                                     "Phone messages cannot be delivered until it is restarted from a herdr pane: {cli} daemon --stop, then {cli} away on"),
         "cli.slots.pane": "  pane {pane}",
         "cli.project.unresolved": "cannot tell which project this is ({error}); run from a directory that exists",
         "cli.reminder": "note: {message}",
@@ -606,6 +615,9 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.status.sub.connecting": "connecting",
         "cli.status.sub.disconnected": "down for {seconds} s",
         "cli.status.line": "daemon: pid {pid}  subscription: {sub}  pending questions: {pending}  confirming: {confirming}  slots: {pool}",
+        "cli.status.herdr.ok": "herdr (daemon's view): reachable via {bin}",
+        "cli.status.herdr.unreachable": "herdr (daemon's view): {bin} found but not answering ({error})",
+        "cli.status.herdr.missing": "herdr (daemon's view): not found on the daemon's PATH — restart it from a herdr pane: {cli} daemon --stop, then {cli} away on",
         "cli.stop.no_ack": "daemon (pid {pid}) did not acknowledge the stop ({other}); please check by hand",
         "cli.stop.no_response": "no response",
         "cli.stop.done": "daemon: pid {pid} stopped",

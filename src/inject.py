@@ -28,12 +28,13 @@ herdr 不认 `--` 分隔符（会把它当 TARGET）；TEXT 位置上以 `-` 开
 
 import json
 import logging
+import os
 import re
 import shlex
 import shutil
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 import texts
@@ -134,6 +135,57 @@ def parse_panes(stdout: str) -> list[dict] | None:
     if not isinstance(panes, list):
         return None
     return [p for p in panes if isinstance(p, dict)]
+
+
+# ---------------------------------------------------------------- daemon 视角的探测（PATH 是启动那一刻的快照，随时可能过期）
+
+DEFAULT_PATHEXT = ".EXE;.CMD;.BAT;.COM"  # 一台从没自己设过 PATHEXT 的 win32 机器的系统缺省
+
+
+def find_herdr_on_path(env: Mapping[str, str] | None = None, platform: str | None = None) -> str | None:
+    """在 env["PATH"]（缺省 os.environ）里按平台分隔符逐目录找 herdr 可执行文件；纯函数，不碰子进程。
+
+    问的是「这份 PATH 快照现在找不找得到 herdr」，不是「能不能跑通」——后者是下面 herdr_view() 的另一步。
+    两个参数都可注入、不看本机真实平台，好在任意宿主上把 win32 分支也测到。
+    posix 还要求文件本身可执行（os.access X_OK）；win32 没有这个概念，改按 PATHEXT（缺省上面那份）
+    逐个后缀试 herdr<ext>。都没有 ⇒ None。
+    """
+    e = os.environ if env is None else env
+    plat = sys.platform if platform is None else platform
+    delim = ";" if plat == "win32" else ":"
+    dirs = [d for d in (e.get("PATH") or "").split(delim) if d]
+    if plat == "win32":
+        names = [f"{HERDR}{ext}" for ext in (e.get("PATHEXT") or DEFAULT_PATHEXT).split(";") if ext]
+    else:
+        names = [HERDR]
+    for d in dirs:
+        for name in names:
+            candidate = os.path.join(d, name)
+            if not os.path.isfile(candidate):
+                continue
+            if plat != "win32" and not os.access(candidate, os.X_OK):
+                continue
+            return candidate
+    return None
+
+
+def herdr_view(run: Runner = run_herdr, env: Mapping[str, str] | None = None, platform: str | None = None) -> dict:
+    """daemon 自己视角的 herdr：PATH 上找不找得到、找到了会不会应答。每次调用现查，不缓存——
+    要不要按请求节流是调用方的事。
+
+    找不到就不必再跑子进程。找到了拿 `pane list` 探一次：解得出 panes 就是真通了。
+    不通时 error 优先取 herdr 自己信封里的 code（服务端说的话，最有信息量）；没有信封
+    （用法错误 / 子进程层面就没起来）就退回 stderr 或 stdout 里的原始文本；两者都空
+    （比如超时）才落到退出码这个最后的标签——有真实诊断的时候都不用它，也永远不给空串。
+    """
+    bin_path = find_herdr_on_path(env, platform)
+    if bin_path is None:
+        return {"bin": None, "reachable": False, "error": "not found on PATH"}
+    r = run([HERDR, "pane", "list"])
+    if r.ok and parse_panes(r.stdout) is not None:
+        return {"bin": bin_path, "reachable": True, "error": None}
+    detail = r.error_code() or r.stderr.strip() or r.stdout.strip() or f"exit code {r.rc}"
+    return {"bin": bin_path, "reachable": False, "error": detail[:100]}
 
 
 # ---------------------------------------------------------------- 窗格（CLI 侧用：开确认窗格 / 起 daemon；daemon 不用）

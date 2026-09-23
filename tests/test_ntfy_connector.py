@@ -397,6 +397,28 @@ class NotifyExitCodesTest(unittest.TestCase):
         self.assertEqual(cm.exception.code, 2)
 
 
+class DaemonEnvTest(unittest.TestCase):
+    """_spawn_daemon 在 herdr 里且 HERDR_BIN_PATH 所在目录不在 PATH 时补一份 env；其余情况沿用今天的继承行为（None）。"""
+
+    def test_prepends_the_herdr_directory_when_missing_from_path(self):
+        env = ntfy_connector._daemon_env({"HERDR_ENV": "1", "HERDR_BIN_PATH": "/opt/homebrew/bin/herdr", "PATH": "/usr/bin"})
+        assert env is not None
+        self.assertEqual(env["PATH"].split(os.pathsep)[0], "/opt/homebrew/bin")
+
+    def test_none_when_the_directory_is_already_on_path(self):
+        path = os.pathsep.join(["/opt/homebrew/bin", "/usr/bin"])
+        env = ntfy_connector._daemon_env({"HERDR_ENV": "1", "HERDR_BIN_PATH": "/opt/homebrew/bin/herdr", "PATH": path})
+        self.assertIsNone(env)
+
+    def test_none_outside_herdr(self):
+        env = ntfy_connector._daemon_env({"HERDR_ENV": "", "HERDR_BIN_PATH": "/opt/homebrew/bin/herdr", "PATH": "/usr/bin"})
+        self.assertIsNone(env)
+
+    def test_none_without_herdr_bin_path(self):
+        env = ntfy_connector._daemon_env({"HERDR_ENV": "1", "PATH": "/usr/bin"})
+        self.assertIsNone(env)
+
+
 class OtherCommandsTest(unittest.TestCase):
     def test_slots_release_status_confirm(self):
         h = Harness(self)
@@ -850,6 +872,41 @@ class ConfirmSubTest(unittest.TestCase):
         self.assertIn("连接中", out)
         self.assertNotIn("None", out)
 
+    def _status_ev(self, herdr):
+        return {"event": "status", "pid": 999, "subscribed": True, "disconnected_for": None,
+                "pending": 0, "confirming": 0, "pool": 5, "herdr": herdr}
+
+    # --status 多打一行 daemon 自己视角的 herdr：三种情况三条文案
+    def test_status_prints_herdr_reachable(self):
+        with mock.patch.object(ntfy_connector, "probe", return_value=self._status_ev({"bin": "/usr/bin/herdr", "reachable": True, "error": None})):
+            code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "daemon", "--status"])
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn(Z("cli.status.herdr.ok", bin="/usr/bin/herdr"), out)
+
+    def test_status_prints_herdr_found_but_unreachable(self):
+        view = {"bin": "/usr/bin/herdr", "reachable": False, "error": "server_not_running"}
+        with mock.patch.object(ntfy_connector, "probe", return_value=self._status_ev(view)):
+            code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "daemon", "--status"])
+        self.assertEqual(code, 0)
+        self.assertIn(Z("cli.status.herdr.unreachable", bin="/usr/bin/herdr", error="server_not_running"), out)
+
+    def test_status_prints_herdr_missing_with_restart_hint(self):
+        view = {"bin": None, "reachable": False, "error": "not found on PATH"}
+        with mock.patch.object(ntfy_connector, "probe", return_value=self._status_ev(view)):
+            code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "daemon", "--status"])
+        self.assertEqual(code, 0)
+        self.assertIn(Z("cli.status.herdr.missing"), out)
+        self.assertIn(f"{texts.CLI} daemon --stop", out)
+
+    # 没有 herdr 键的旧形态 probe 返回值（例如别的用例换掉了整个 status 事件）：不崩，也不多打这一行
+    def test_status_without_herdr_key_prints_nothing_extra(self):
+        ev = self._status_ev(None)
+        del ev["herdr"]
+        with mock.patch.object(ntfy_connector, "probe", return_value=ev):
+            code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "daemon", "--status"])
+        self.assertEqual(code, 0)
+        self.assertNotIn("herdr", out)
+
     # --status 行尾打传输类型；探活走 socket，不看 pid 文件
     def test_status_prints_transport(self):
         h = Harness(self)
@@ -1201,6 +1258,23 @@ class AwayOnTest(unittest.TestCase):
         self.assertEqual((self.state()["away"], self.state()["target"]), (True, owner(self.root)))
         self.assertEqual(self.fake.calls, [])
         self.assertEqual(h.state.slots()["slot1"]["pane"], "wD:p1")  # 顺手把租约的窗格刷新成当前窗格
+
+    # daemon 自己 PATH 上找不到 herdr、且此刻在 herdr 里：away on 成功照旧（退出码不变），但 stderr 多一句警告 + 重启指引
+    def test_daemon_missing_herdr_prints_a_stderr_warning_inside_herdr(self):
+        h = Harness(self, herdr_view=lambda: {"bin": None, "reachable": False, "error": "not found on PATH"})
+        h.state.acquire(owner(self.root), pane="wD:p9")
+        code, out, err = self.away_on(h.home)  # 默认 env=HERDR：在 herdr 里
+        self.assertEqual(code, 0)
+        self.assertEqual(out.splitlines()[0], Z("cli.away.ready", slot="slot1"))
+        self.assertIn("cannot find herdr on its PATH", err)
+        self.assertIn(f"{texts.CLI} daemon --stop", err)
+
+    # 同样的 daemon 视角，但调用方不在 herdr 里：没处重启、也没有窗格可指，不打这句警告
+    def test_daemon_missing_herdr_is_silent_outside_herdr(self):
+        h = Harness(self, herdr_view=lambda: {"bin": None, "reachable": False, "error": "not found on PATH"})
+        h.state.acquire(owner(self.root), pane="wD:p9")
+        code, out, err = self.away_on(h.home, env={})
+        self.assertEqual((code, err), (0, ""))
 
     # 未租但池里有空闲已过闸槽位：当场租下（人要走了，租约与过闸此刻落定），不开 pane；状态文件记下槽位
     def test_leases_a_confirmed_free_slot_immediately(self):
