@@ -132,9 +132,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "daemon.confirm.busy_confirming": "槽位 {slot} 已在确认中，等它结束再确认",
         "daemon.confirm.mark_failed": "按钮已收到，但订阅状态落盘失败（看 daemon 日志）；修好后再跑一次 confirm-sub",
         # ---- CLI 人读输出
-        "cli.start_hint": ("daemon 没在跑。启动方式：\n"
-                           "  herdr 内 ：另开一个 pane 跑  {cli} daemon      （可见、herdr 管生命周期）\n"
-                           "  非 herdr ：{cli} daemon --detach              （脱离会话，靠 --status / --stop 管）\n"
+        "cli.start_hint": ("daemon 没在跑。启动：{cli} daemon --detach（脱离会话，靠 --status / --stop 管）\n"
                            "  ⚠️ 别用 agent 自己内部的 shell 或后台任务起它——agent 一退出它就跟着没了"),
         "cli.connect_failed": "连不上 daemon（{path}：{error}）",
         "cli.connect_failed.not_sent": "连不上 daemon（{path}：{error}）。消息未发送。",
@@ -193,7 +191,6 @@ TEXTS: dict[str, dict[str, str]] = {
                                 "  让用户去那个窗格完成订阅并按回车，再在手机通知栏点按钮"),
         "cli.away.daemon_failed": "daemon 没有起来（{seconds} 秒内探不到），远程交互模式未开启；看日志 {log}",
         "cli.away.unwritable": "状态目录 {path} 不可写（已存在但不是目录，或没有写权限）",
-        "cli.away.pane_failed": "在 herdr 里开不出窗格（或命令没敲进去），daemon 没有起来，远程交互模式未开启；请在终端跑 {cli} daemon --detach 后重试",
         # agent 读的诊断，不是给人看的：两栏故意同一句英文，不随 --lang 变
         "cli.away.daemon_no_herdr": ("warning: the daemon cannot find herdr on its PATH (was it started before herdr was installed?). "
                                      "Phone messages cannot be delivered until it is restarted from a herdr pane: {cli} daemon --stop, then {cli} away on"),
@@ -502,9 +499,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "daemon.confirm.busy_pending": "slot {slot} has a question waiting for a reply; confirm after it finishes",
         "daemon.confirm.busy_confirming": "slot {slot} is already being confirmed; wait for that to finish",
         "daemon.confirm.mark_failed": "button received, but saving the subscription state failed (see the daemon log); fix it and run confirm-sub again",
-        "cli.start_hint": ("The daemon is not running. Start it:\n"
-                           "  inside herdr : open another pane and run  {cli} daemon      (visible, herdr owns its lifetime)\n"
-                           "  outside herdr: {cli} daemon --detach              (detached; manage with --status / --stop)\n"
+        "cli.start_hint": ("The daemon is not running. Start it: {cli} daemon --detach (detached; manage with --status / --stop)\n"
                            "  ⚠️ don't start it from the agent's own shell or as its background task — it dies with the agent"),
         "cli.connect_failed": "can't connect to the daemon ({path}: {error})",
         "cli.connect_failed.not_sent": "can't connect to the daemon ({path}: {error}). Message NOT sent.",
@@ -561,7 +556,6 @@ TEXTS: dict[str, dict[str, str]] = {
                                 "  have the user finish subscribing and press Enter in that pane, then tap the button on the phone"),
         "cli.away.daemon_failed": "the daemon did not come up (not reachable within {seconds} s); remote mode NOT enabled. See the log {log}",
         "cli.away.unwritable": "state directory {path} is not writable (exists but is not a directory, or no write permission)",
-        "cli.away.pane_failed": "could not open a herdr pane (or the command did not get typed in); the daemon was not started and remote mode is NOT enabled. Run {cli} daemon --detach in a terminal, then retry",
         # agent-facing diagnostic, not user-facing: deliberately identical in both columns, does not change with --lang
         "cli.away.daemon_no_herdr": ("warning: the daemon cannot find herdr on its PATH (was it started before herdr was installed?). "
                                      "Phone messages cannot be delivered until it is restarted from a herdr pane: {cli} daemon --stop, then {cli} away on"),

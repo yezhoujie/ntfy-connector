@@ -678,20 +678,14 @@ def _state_dir_writable(root: Path) -> bool:
 
 
 def _ensure_daemon(home: Path, lang: str) -> bool:
-    """daemon 保障：探不到就起一个（herdr 里开窗格在里面前台跑——日志直接可见；否则脱离会话跑），等它在 socket 上应答。"""
+    """daemon 保障：探不到就脱离会话起一个，等它在 socket 上应答。"""
     deadline = time.monotonic() + DAEMON_START_TIMEOUT  # 整个保障过程（含第一次探活）的总预算
     if probe(home, timeout=min(PROBE_TIMEOUT, DAEMON_START_TIMEOUT)) is not None:
         return True
-    proc = None
-    if herdr_available():
-        if run_self_in_new_pane(home, lang, "daemon") is None:  # 窗格开不出来 / 命令敲不进去：不会有应答，不必等
-            err(texts.t("cli.away.pane_failed", lang))
-            return False
-    else:
-        proc = _spawn_daemon(home, lang)
+    proc = _spawn_daemon(home, lang)
     while (remaining := deadline - time.monotonic()) > 0:
         time.sleep(0.1)
-        if proc is not None and proc.poll() is not None:  # 子进程已经退了：再等也不会有应答，报它的退出码
+        if proc.poll() is not None:  # 子进程已经退了：再等也不会有应答，报它的退出码
             err(texts.t("cli.detach.died", lang, rc=proc.poll(), log=home / "daemon.log"))
             return False
         if probe(home, timeout=min(PROBE_TIMEOUT, remaining)) is not None:  # 单次探活不许把总预算撑长
