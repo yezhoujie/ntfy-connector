@@ -12,6 +12,33 @@ Versions before 0.2.0 were released inside the shared `agent-remote-communicatio
 and were tagged bare `vX.Y.Z`). This repository carries that history forward under one uniform scheme,
 `vX.Y.Z`; the entries below are unchanged from how they were written at the time.
 
+### [0.3.0] - 2026-09-23
+
+#### Added
+
+- Switching remote mode on or off now sends one notification to the phone. The "on" one says what the
+  channel can actually do right now: what you type in the topic reaches the terminal, or — when this machine
+  has no herdr, or the daemon cannot find it — what will not get through and what to do about it. The "off"
+  one goes out *before* the slot is released, so it cannot be lost to another project taking the slot.
+- `daemon --status` prints the daemon's own view of herdr: the path it resolved, or that it found nothing on
+  its PATH, with the two commands that fix it. `away on` from inside herdr warns on stderr when the daemon
+  cannot see herdr, without changing its exit code.
+
+#### Changed
+
+- Every command the CLI tells a human to run is now the full `python3 "<skill dir>/scripts/ntfy_connector.py" …`
+  form instead of the bare name `ntfy-connector`, which is on nobody's PATH. The READMEs drop the alias step
+  and give the install locations instead. Passages that quote `--help` output verbatim keep the bare name:
+  that is what the program prints.
+- `away on` now starts the daemon detached everywhere, inside herdr as well — no pane is opened for it. The
+  pane it used to run in served no purpose once remote mode was up, and closing it killed the daemon. Watch
+  it with `daemon --status`, stop it with `daemon --stop`. The reachability check still opens its own pane:
+  it shows the topic, waits for Enter and for the button on the phone, and closes itself afterwards.
+- A message that could not be injected because the daemon cannot find the herdr executable now says so and
+  tells you to restart it from a herdr pane, instead of only reporting that herdr is missing.
+- `daemon --detach` started from inside herdr adds herdr's own directory to the daemon's PATH, so the case
+  above does not arise for daemons started that way.
+
 ### [0.2.0] - 2026-09-20
 
 #### Changed
@@ -223,6 +250,7 @@ relative to those untagged versions.
 - A missing `security` command (the keychain exists only on macOS) is reported as such, with the
   `AGENT_NTFY_STORE` alternatives, instead of as a socket error.
 
+[0.3.0]: https://github.com/yezhoujie/ntfy-connector/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/yezhoujie/ntfy-connector/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/yezhoujie/ntfy-connector/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/yezhoujie/ntfy-connector/compare/v0.1.1...v0.1.2
