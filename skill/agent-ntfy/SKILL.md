@@ -163,18 +163,16 @@ pending question" if there is one, and a free-standing message otherwise. Never 
 
 One resident process subscribes to ntfy for every question; `ask` and `notify` only talk to it over a
 local IPC endpoint (a Unix socket, or a loopback TCP port on Windows). If it is not running, they exit 3
-without sending, and stderr prints the start commands.
+without sending, and stderr prints the start command.
 
 You may start it yourself, but **never from your own shell as a background job, a Monitor, or a
 subagent**: it dies with you, and every message the human sends afterwards is lost silently.
 
-- Inside herdr: `away on` (next section) starts it for you — and switches remote mode on, so use the
-  by-hand form if you only need the daemon: split a pane
-  (`herdr pane split --current --direction right --cwd "$PWD" --no-focus`) and run
-  `python3 <skill dir>/scripts/ntfy_connector.py daemon` in it (`herdr pane run <new pane id> "…"`).
-- Anywhere else (macOS, Linux, Windows): `python3 <skill dir>/scripts/ntfy_connector.py daemon --detach`
-  (a detached process: its own session on POSIX, a background process without a console window on
-  Windows, by the `DETACHED_PROCESS` flag).
+- `away on` (next section) starts it for you if it is not already running — and switches remote mode on,
+  so use the command below if you only need the daemon by itself.
+- `python3 <skill dir>/scripts/ntfy_connector.py daemon --detach` (a detached process: its own session on
+  POSIX, a background process without a console window on Windows, by the `DETACHED_PROCESS` flag). It
+  starts this way in or out of herdr alike — no pane is opened for it.
 - `daemon --status` prints one line ending in `transport: unix` or `transport: tcp`; `daemon --stop`
   asks it over the same endpoint to shut down (no signals involved) and waits for its files to go.
 
@@ -200,7 +198,7 @@ this skill). Enabling it is one command:
 python3 <skill dir>/scripts/ntfy_connector.py away on
 ```
 
-It starts the daemon if needed (in a herdr pane when inside herdr, detached otherwise), makes sure a
+It starts the daemon if needed (always detached — the same way in or out of herdr), makes sure a
 slot the phone actually receives is available, and only then writes the state file. **Relay its stdout
 to the user**; the outcomes are:
 
@@ -216,7 +214,7 @@ to the user**; the outcomes are:
   arrives (the user closed the pane by hand, or the injection failed), `slots` shows the truth.
 - `… slot slotN is being confirmed right now (a confirmation pane is already open): …` — a pane from an
   earlier run is still open; the user finishes there.
-- rc 3 (daemon did not come up, or no herdr pane could be opened) or rc 4 (outside herdr and the slot is
+- rc 3 (the daemon did not come up) or rc 4 (outside herdr and the slot is
   unconfirmed, so the user must run `confirm-sub <slot>` in their own terminal — relay that; when their run
   finishes it prints one line for them to send back to you, `ntfy-connector: slotN is confirmed; …`, because
   without herdr nothing reaches you by itself; or every slot is leased: stderr `All N slots are leased;

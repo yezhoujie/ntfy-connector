@@ -71,7 +71,7 @@ agent ──ask（stdin 里的 JSON）──▶ ntfy-connector ──本机 sock
 | 不装 herdr 也能用 | 必须有 herdr |
 |---|---|
 | `ask` 整条链路：手机上出卡片 → 点按钮或打字 → 回复回到 stdout → 退出码；`notify` | 手机 → agent 的消息：没有提问在等时你主动发的指令，或者回一张已经超时 / 已取消的旧卡片 |
-| daemon 与其余全部子命令：`confirm-sub`、`slots`、`release`、`add-slot`、`away` | `away on` 在窗格里起 daemon、`confirm-sub` 替你开窗格（没有 herdr 时它们退回 `daemon --detach` 与「请你自己跑 `confirm-sub`」） |
+| daemon 与其余全部子命令：`confirm-sub`、`slots`、`release`、`add-slot`、`away` | `confirm-sub` 替你开窗格（没有 herdr 时退回「请你自己跑 `confirm-sub`」） |
 | 租约两种情况下都按项目算；不装 herdr 时租约上没有窗格，也就没有可注入的地方 | |
 
 这种消息不会静默丢掉。daemon 会在手机上回一张回执，标题「[slotN] 消息未送达」，正文是「槽位 slotN 的租约没有登记目标窗格（发起命令的会话不在 herdr 里）。在 herdr 窗格里对这个项目跑 ask / notify / slots / release（不带参数）/ away on 或 away status 任一条即可登记，或释放这个槽位。」加一行「你刚才发的内容没有送达任何 agent。」，带「释放这个槽位」/「忽略」两个按钮。
@@ -136,12 +136,11 @@ python3 "<skill dir>/scripts/ntfy_connector.py" …        # Windows 用 python 
 **第 1 步——起 daemon。** 它必须比 agent 活得久，所以自己单独跑：
 
 ```bash
-python3 "<skill dir>/scripts/ntfy_connector.py" daemon --detach        # 任何平台：daemon：已在后台启动，pid 12345（日志 ~/.ntfy-connector/daemon.log）
-python3 "<skill dir>/scripts/ntfy_connector.py" daemon                 # 在 herdr 里：改在一个空闲窗格里前台跑，看得见
+python3 "<skill dir>/scripts/ntfy_connector.py" daemon --detach        # 任何平台、在不在 herdr 里都一样：daemon：已在后台启动，pid 12345（日志 ~/.ntfy-connector/daemon.log）
 python3 "<skill dir>/scripts/ntfy_connector.py" daemon --status        # daemon：pid 12345  订阅：已连上  等待中的提问：0  确认中：0  槽位：5  传输：unix
 ```
 
-这里的路径用 `~` 缩写；CLI 打印的是展开后的绝对路径。`--detach` 若报「daemon（pid 12345）5 秒内还没就绪，仍在启动；稍后用 python3 "<skill dir>/scripts/ntfy_connector.py" daemon --status 看，日志 …」，先看日志——macOS 上可能的原因之一是首次运行时屏幕上有钥匙串授权对话框（池子是经 `security` 命令读的）：答完再跑 `--status`。要看到中文文案，加 `--lang zh`（或设 `NTFY_CONNECTOR_LANG=zh`，或 shell 本身就是中文 locale）：daemon 的语言以启动时解析的为准，之后不再改（由 `away on` 代起时，它会把调用方的语言带过去）。绝不要把 daemon 当作 agent 自己 shell 的后台任务起：agent 一退出它就没了。这一步也可以不手动做：`away on`（§9.1）发现没有 daemon 应答时会自己起一个。
+这里的路径用 `~` 缩写；CLI 打印的是展开后的绝对路径。`--detach` 若报「daemon（pid 12345）5 秒内还没就绪，仍在启动；稍后用 python3 "<skill dir>/scripts/ntfy_connector.py" daemon --status 看，日志 …」，先看日志——macOS 上可能的原因之一是首次运行时屏幕上有钥匙串授权对话框（池子是经 `security` 命令读的）：答完再跑 `--status`。要看到中文文案，加 `--lang zh`（或设 `NTFY_CONNECTOR_LANG=zh`，或 shell 本身就是中文 locale）：daemon 的语言以启动时解析的为准，之后不再改（由 `away on` 代起时，它会把调用方的语言带过去）。绝不要把 daemon 当作 agent 自己 shell 的后台任务起：agent 一退出它就没了。这一步也可以不手动做：`away on`（§9.1）发现没有 daemon 应答时会自己起一个。这样起来的 daemon 不随 herdr、也不随任何窗格收场——要看它就 `daemon --status`，要停就 `daemon --stop`。
 
 **第 2 步——确认手机收得到槽位 1 的通知。** 在你自己的终端跑（别经 agent：它会打印 topic 名，那就是密码）：
 
@@ -245,7 +244,7 @@ JSON
 | 变量 | 默认 | 作用 |
 |---|---|---|
 | `NTFY_CONNECTOR_HOME` | `~/.ntfy-connector` | 状态目录（目录 0700、文件 0600，在有这些权限位的平台上）：`daemon.sock` 或 `daemon.port`（见 `NTFY_CONNECTOR_IPC`）、`daemon.pid`、`daemon.log`、`leases.json`，以及用到时的 topic 池文件（`topics.json` / `topics.dpapi`，见 `NTFY_CONNECTOR_STORE`）。用 unix socket 传输时路径别太深：socket 路径有一个随系统而异的长度上限，太深 daemon 拒绝启动并提示「无法监听 IPC：…。unix socket 路径有长度上限（系统上限），换一个短一点的 NTFY_CONNECTOR_HOME」 |
-| `NTFY_CONNECTOR_LANG` | （系统 locale，否则 `en`） | 一切固定文案的语言（卡片标签、按钮、回执、CLI 输出、`--help`）：`zh` 或 `en`。解析顺序：命令行 `--lang zh\|en`（顶层选项，放在子命令前）> 本变量 > 系统 locale（`LC_ALL` / `LC_MESSAGES` / `LANG` 以 `zh` 开头，或 Windows 的中文区域 ⇒ `zh`）> `en`。别的值直接报错，不静默回退（给了 `--lang` 时以它为准、忽略本变量）。agent 可以用 JSON 里的 `lang` 字段按条覆盖。CLI 自己开 herdr 窗格（`away on` 起 daemon、`confirm-sub` 替你开确认窗格）或 detach 起 daemon 时，会把解析出的语言用 `--lang` 带过去，窗格自己的 shell 不决定文案；只有你手工在窗格里起的 daemon / 命令才继承那个窗格的环境 |
+| `NTFY_CONNECTOR_LANG` | （系统 locale，否则 `en`） | 一切固定文案的语言（卡片标签、按钮、回执、CLI 输出、`--help`）：`zh` 或 `en`。解析顺序：命令行 `--lang zh\|en`（顶层选项，放在子命令前）> 本变量 > 系统 locale（`LC_ALL` / `LC_MESSAGES` / `LANG` 以 `zh` 开头，或 Windows 的中文区域 ⇒ `zh`）> `en`。别的值直接报错，不静默回退（给了 `--lang` 时以它为准、忽略本变量）。agent 可以用 JSON 里的 `lang` 字段按条覆盖。CLI 自己开 herdr 窗格（`confirm-sub` 替你开确认窗格）或 detach 起 daemon 时（`away on` 起 daemon、或 `daemon --detach`），会把解析出的语言用 `--lang` 带过去，窗格自己的 shell 不决定文案；只有你手工在窗格里起的 daemon / 命令才继承那个窗格的环境 |
 | `NTFY_CONNECTOR_TARGET` | `proj:<项目根>` | 租槽位的身份（`slots` 里显示的租约持有者就是它）。想让几个项目共用一个槽位、或把某个项目单独隔开就设它；同一个值永远复用同一个槽位 |
 | `NTFY_CONNECTOR_URL` | `https://ntfy.sh` | 换一个 ntfy 实例，如自建 |
 | `NTFY_CONNECTOR_IPC` | macOS / Linux 上 `unix`，Windows 上 `tcp` | CLI 与 daemon 之间的传输。`unix`：unix socket `daemon.sock`，靠文件权限保护。`tcp`：回环 TCP 端口；`daemon.port` 两行——端口与一个随机口令——每个请求的首行都带这个口令（否则本机任何进程都能连上）。残留的端点文件按残骸处理，除非对它发起连接真的连上了（「端口连得上 ⇒ 已有实例在跑」）；要是碰巧被无关进程占住了那个端口，删掉 `daemon.port` 再起 daemon。Windows 上不接受 `unix`；其他值直接报错 |
@@ -266,7 +265,7 @@ python3 "<skill dir>/scripts/ntfy_connector.py" away off       # 我回来了
 python3 "<skill dir>/scripts/ntfy_connector.py" away status    # 人读；加 --json 打印原文
 ```
 
-`away on` 是一站式的：没有 daemon 应答就起一个（在 herdr 里开新窗格起，否则用 `--detach`）；当场给本项目租一个槽位——已经租着的就沿用，否则优先空闲的已过闸槽位，再没有就租编号最小的未过闸空闲槽位并接着走确认（在 herdr 里开一个确认窗格、告诉 agent 该让你看哪个窗格，确认结束时窗格会把结果送回 agent 的会话；不在 herdr 里就退 4 并写明要跑的 `confirm-sub` 命令）；这些都成了才在 `<项目根>/.ntfy-connector/` 建目录（项目根 = git 仓根，不在仓里就是当前目录），目录自带 `.gitignore`（内容 `*`，git 看不到它，你仓里的 `.gitignore` 不动），内有 `state.json`：
+`away on` 是一站式的：没有 daemon 应答就起一个（脱离会话跑，在不在 herdr 里都一样）；当场给本项目租一个槽位——已经租着的就沿用，否则优先空闲的已过闸槽位，再没有就租编号最小的未过闸空闲槽位并接着走确认（在 herdr 里开一个确认窗格、告诉 agent 该让你看哪个窗格，确认结束时窗格会把结果送回 agent 的会话；不在 herdr 里就退 4 并写明要跑的 `confirm-sub` 命令）；这些都成了才在 `<项目根>/.ntfy-connector/` 建目录（项目根 = git 仓根，不在仓里就是当前目录），目录自带 `.gitignore`（内容 `*`，git 看不到它，你仓里的 `.gitignore` 不动），内有 `state.json`：
 
 ```json
 {"away": true, "slot": "slot2", "confirmed": true, "target": "proj:/path/to/project", "updated": "2026-09-13T21:04:11+08:00"}

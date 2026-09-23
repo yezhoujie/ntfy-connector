@@ -198,7 +198,7 @@ class AskExitCodesTest(unittest.TestCase):
         self.assertEqual((code, out), (3, ""))
         self.assertIn("消息未发送", err)
         self.assertIn(f"{texts.CLI} daemon --detach", err)
-        self.assertIn("herdr", err)
+        self.assertIn("agent 自己内部的 shell", err)  # 「别用 agent 自己的 shell / 后台任务起它」的告诫仍保留
 
     # 3：daemon 中途停了，stderr 写明「已发送但」
     def test_daemon_stopping_exit_3_says_sent(self):
@@ -1412,45 +1412,17 @@ class AwayOnTest(unittest.TestCase):
         self.assertFalse((self.root / projstate.DIR_NAME).exists())
         self.assertEqual([c[1:3] for c in self.fake.calls], [])
 
-    # daemon 没跑、在 herdr 里：开窗格在里面起 daemon；探活等到超时仍没起来 ⇒ 退 3，不写文件、不建目录
-    def test_daemon_not_started_in_herdr_exits_3_without_writing(self):
+    # daemon 没跑：不管在不在 herdr 里都一律脱离会话起，不再开窗格；探活等到超时仍没起来 ⇒ 退 3，不写文件、不建目录
+    def test_daemon_not_started_exits_3_without_writing(self):
         home = Path(tempfile.mkdtemp(prefix="home-")) / "home"
         self.addCleanup(shutil.rmtree, home.parent, ignore_errors=True)
-        with mock.patch("ntfy_connector.DAEMON_START_TIMEOUT", 0.3):
-            code, out, err = self.away_on(home)
+        with mock.patch("ntfy_connector.DAEMON_START_TIMEOUT", 0.3), \
+             mock.patch("ntfy_connector._spawn_daemon", return_value=mock.Mock(poll=lambda: None)):
+            code, out, err = self.away_on(home)  # 默认 env=HERDR：在 herdr 里也一样
         self.assertEqual((code, out), (3, ""))
         self.assertIn(Z("cli.away.daemon_failed", seconds="0.3", log=home / "daemon.log"), err)
-        self.assertEqual([c[1:3] for c in self.fake.calls], [["pane", "list"], ["pane", "split"], ["pane", "run"]])
-        self.assertEqual(self.pane_commands()[0], [sys.executable, os.path.abspath(ntfy_connector.__file__), "--lang", "zh", "--home", str(home), "daemon"])
+        self.assertEqual(self.fake.calls, [])  # 没有开窗格，herdr 完全没被碰
         self.assertFalse((self.root / projstate.DIR_NAME).exists())
-
-    # 在 herdr 里但窗格开不出来：立刻退 3，不傻等探活超时
-    def test_split_failure_exits_3_without_waiting(self):
-        home = Path(tempfile.mkdtemp(prefix="home-")) / "home"
-        self.addCleanup(shutil.rmtree, home.parent, ignore_errors=True)
-        self.fake.split_result = HerdrResult(rc=1, stdout="", stderr=herdr_error("pane:split", "pane_not_found"))
-        started = time.monotonic()
-        with mock.patch("ntfy_connector.DAEMON_START_TIMEOUT", 3.0):
-            code, out, err = self.away_on(home)
-        self.assertEqual((code, out), (3, ""))
-        self.assertLess(time.monotonic() - started, 1.0)
-        self.assertIn(Z("cli.away.pane_failed"), err)  # 不是「探不到」：根本没起，指路 daemon --detach
-        self.assertIn("daemon --detach", err)
-        self.assertEqual([c[1:3] for c in self.fake.calls], [["pane", "list"], ["pane", "split"]])
-        self.assertFalse((self.root / projstate.DIR_NAME).exists())
-
-    # 窗格开出来了但命令敲不进去：同样立刻退 3
-    def test_run_failure_after_split_exits_3_without_waiting(self):
-        home = Path(tempfile.mkdtemp(prefix="home-")) / "home"
-        self.addCleanup(shutil.rmtree, home.parent, ignore_errors=True)
-        self.fake.run_result = HerdrResult(rc=1, stdout="", stderr=herdr_error("pane:run", "pane_not_found"))
-        started = time.monotonic()
-        with mock.patch("ntfy_connector.DAEMON_START_TIMEOUT", 3.0):
-            code, out, err = self.away_on(home)
-        self.assertEqual((code, out), (3, ""))
-        self.assertLess(time.monotonic() - started, 1.0)
-        self.assertIn(Z("cli.away.pane_failed"), err)
-        self.assertEqual([c[1:3] for c in self.fake.calls], [["pane", "list"], ["pane", "split"], ["pane", "run"]])
 
     # daemon 已 bind 但不应答（卡在初始化）：总耗时仍以 DAEMON_START_TIMEOUT 为准，单次探活超时不能把它撑长
     def test_silent_listener_respects_the_overall_budget(self):
@@ -1495,6 +1467,25 @@ class AwayOnTest(unittest.TestCase):
         self.assertEqual(out.splitlines()[0], Z("cli.away.ready", slot="slot1"))
         self.assertEqual((self.state()["away"], self.state()["slot"]), (True, "slot1"))
         self.assertEqual(self.fake.calls, [])
+
+    # 在 herdr 里同样脱离会话起 daemon：不再开窗格，run_self_in_new_pane 一次都不会被调用
+    def test_daemon_spawned_inside_herdr_too_no_pane_opened(self):
+        h = Harness(self)
+        real_probe, probes = ntfy_connector.probe, []
+
+        def probe_none_first(home, **kw):
+            probes.append(home)
+            return None if len(probes) == 1 else real_probe(home, **kw)
+
+        spawned = []
+        with mock.patch("ntfy_connector.probe", probe_none_first), \
+             mock.patch("ntfy_connector._spawn_daemon", lambda home, lang: spawned.append((home, lang)) or mock.Mock(poll=lambda: None)), \
+             mock.patch("ntfy_connector.run_self_in_new_pane") as pane:
+            code, out, err = self.away_on(h.home)  # 默认 env=HERDR：在 herdr 里
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(spawned, [(h.home, "zh")])
+        pane.assert_not_called()
+        self.assertEqual(self.fake.calls, [])  # herdr_available() 也没被摸：连 pane list 都没打
 
     # away off：顺带释放本项目的租约（daemon 在跑时），状态文件的 slot 清空
     def test_off_releases_the_projects_lease(self):

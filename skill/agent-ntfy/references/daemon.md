@@ -27,14 +27,20 @@ the answer arrives; if the daemon dies, the connection drops and `ask` exits 3 a
 
 ## 2. Starting it (and how not to)
 
-`ask` and `notify` exit 3 and print the start commands when the daemon is not running. You may start it
+`ask` and `notify` exit 3 and print the start command when the daemon is not running. You may start it
 for the user. The only rule: **it must outlive you.**
+
+`ntfy-connector away on` starts it automatically if none is running yet — the same way as below, detached,
+whether or not you are inside herdr — and switches remote mode on (SKILL.md, "Remote mode"). Use the table
+below when you want the daemon by itself.
 
 | where you are | do this |
 |---|---|
-| inside herdr (exercised on macOS; the pane command is a POSIX `env …` line, not tried on Windows) | `ntfy-connector away on` starts it in a new pane for you — and switches remote mode on (SKILL.md, "Remote mode"). By hand: `herdr pane split --current --direction right --cwd "$PWD" --no-focus` returns the new pane id (`.result.pane.pane_id`); then `herdr pane run <pane id> "python3 <skill dir>/scripts/ntfy_connector.py daemon"`. Visible, and herdr owns its lifetime |
-| macOS / Linux, outside herdr | `ntfy-connector daemon --detach`: starts the daemon in its own session, prints `daemon: started in the background, pid N (log <home>/daemon.log)` once the endpoint answers |
-| Windows, outside herdr | `ntfy-connector daemon --detach`: starts it as a detached background process (no console window, by the `DETACHED_PROCESS` flag); same output. Run it from Git Bash like every other command in these docs (under WSL the skill runs as Linux) |
+| macOS / Linux | `ntfy-connector daemon --detach`: starts the daemon in its own session, prints `daemon: started in the background, pid N (log <home>/daemon.log)` once the endpoint answers |
+| Windows | `ntfy-connector daemon --detach`: starts it as a detached background process (no console window, by the `DETACHED_PROCESS` flag); same output. Run it from Git Bash like every other command in these docs (under WSL the skill runs as Linux) |
+
+Either way, once started the daemon does not end with herdr, with any pane, or with the shell it was
+launched from — it is detached from all of them. Check on it with `--status`, stop it with `--stop`.
 
 **Never** start it as a background job of your own shell, under a Monitor, in a subagent, or with `&`
 in a tool call: those die with your session, and every message the human sends afterwards is lost
