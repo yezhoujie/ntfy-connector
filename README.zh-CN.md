@@ -274,6 +274,8 @@ python3 "<skill dir>/scripts/ntfy_connector.py" away status    # 人读；加 --
 
 `slot` / `confirmed` / `target` 由 `ask`、`notify`、`confirm-sub`、`release`、`away` 顺手刷新——但**只在目录已存在的项目里**，没启用过远程模式的项目不会被建目录。`away status` 会向 daemon 要租约、两边不一致时按 daemon 改写文件（并打印「已按 daemon 的租约校正状态文件」）；daemon 没跑就照旧读文件并注明未校对。topic 名永远不写进去。`away` 为 `true` 期间 `ask` / `notify` 只用已过闸的槽位——没有人在键盘旁替新槽位过闸。
 
+开关切换时手机也会自动收到一条通知：`away on` 在槽位真正过闸之后发一条，措辞会说明你主动发的消息能不能送进终端（取决于 agent 是否在 herdr 里、daemon 自己的 PATH 上找不找得到 herdr）；`away off` 在释放租约之前发一条，请你回终端继续。两条都不需要你做什么，发不出去也不影响开关本身的退出码与状态文件——只会在 agent 的 stderr 多一行说明。
+
 `away status --json`（给 agent 读的那个形态）要在 agent 所在的 herdr 窗格里、或它起的子进程里跑：它和 `ask` / `notify` / `slots` 一样会把当前窗格记到租约上，从别处跑会把手机消息指到错的窗格。一条典型的规则是：*`.ntfy-connector/state.json` 里 `away: true` ⇒ 一切要我拍板的事用 `ntfy-connector ask`；后台跑（前台工具调用几分钟就会被杀、卡片作废）；做完 `away off`（它会释放槽位）。*
 
 ## 10. 已知行为

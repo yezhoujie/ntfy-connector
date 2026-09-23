@@ -233,6 +233,11 @@ to the user**; the outcomes are:
   that stderr to the user and wait for them to decide; if it stops cleanly, run `away on` again and tell the
   user the daemon has been restarted and phone messages can now be delivered.
 
+Once a confirmed slot actually backs it, `away on` also pushes a notification to the phone on its own — you
+do not need to send one yourself with `notify`. `away off` sends one too, before it releases the lease,
+telling the human to continue from the terminal; a send failure never changes the exit code or the state
+file, it only adds a `note: the phone was not notified (…)` line to stderr for you to see.
+
 The switch and the current slot live in `<project root>/.ntfy-connector/state.json` (project root = the git
 toplevel, else the cwd), written by `away on|off` and refreshed by `ask` / `notify` / `confirm-sub` /
 `release`. Read it with `away status --json`:

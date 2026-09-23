@@ -1276,6 +1276,71 @@ class AwayOnTest(unittest.TestCase):
         code, out, err = self.away_on(h.home, env={})
         self.assertEqual((code, err), (0, ""))
 
+    # 开成了：给手机推一条通知；在 herdr 里且 daemon 自己视角找得到 herdr ⇒ 消息能直接送进终端那句
+    def test_on_notifies_full_body_when_herdr_is_reachable(self):
+        h = Harness(self)
+        h.state.acquire(owner(self.root), pane="wD:p9")
+        code, out, err = self.away_on(h.home)
+        self.assertEqual((code, err), (0, ""))
+        pub = h.client.published[-1]
+        self.assertEqual(pub["title"], f"[{self.root.name}] " + Z("away.on.title"))
+        self.assertIn(Z("away.on.body.full"), pub["message"])
+
+    # 不在 herdr 里 ⇒ 说明只有对提问的回复能回到 agent
+    def test_on_notifies_no_herdr_body_outside_herdr(self):
+        h = Harness(self)
+        h.state.acquire(owner(self.root), pane="wD:p9")
+        code, out, err = self.away_on(h.home, env={})
+        self.assertEqual((code, err), (0, ""))
+        pub = h.client.published[-1]
+        self.assertEqual(pub["title"], f"[{self.root.name}] " + Z("away.on.title"))
+        self.assertIn(Z("away.on.body.no_herdr"), pub["message"])
+
+    # 在 herdr 里，但 daemon 自己 PATH 上找不到 herdr ⇒ 用户逐字定的那句，逐字核对
+    def test_on_notifies_daemon_no_herdr_body_verbatim(self):
+        h = Harness(self, herdr_view=lambda: {"bin": None, "reachable": False, "error": "not found on PATH"})
+        h.state.acquire(owner(self.root), pane="wD:p9")
+        code, out, err = self.away_on(h.home)
+        self.assertEqual(code, 0)
+        pub = h.client.published[-1]
+        self.assertIn("daemon 找不到 herdr，重启前你主动发的消息送不到，推荐让 agent 帮你重启 daemon 来使用完整功能。", pub["message"])
+        self.assertEqual(Z("away.on.body.daemon_no_herdr"), "daemon 找不到 herdr，重启前你主动发的消息送不到，推荐让 agent 帮你重启 daemon 来使用完整功能。")
+
+    # 在 herdr 里，但通知发送前那次自探（_away_on_body 里的 probe）恰好没拿到结果：按「找不到 herdr」的更安全文案处理，
+    # 不学 _warn_if_daemon_has_no_herdr 探不到就不吭声那一套——正文没有第三种「不确定」的说法
+    def test_on_notifies_daemon_no_herdr_body_when_probe_is_unreachable(self):
+        h = Harness(self)
+        h.state.acquire(owner(self.root), pane="wD:p9")
+        real_probe = ntfy_connector.probe
+
+        def probe_stub(home, **kw):
+            return real_probe(home, **kw) if "timeout" in kw else None  # _ensure_daemon 的探活带 timeout，照常放行
+
+        with mock.patch.object(ntfy_connector, "probe", probe_stub):
+            code, out, err = self.away_on(h.home)
+        self.assertEqual((code, err), (0, ""))
+        pub = h.client.published[-1]
+        self.assertIn(Z("away.on.body.daemon_no_herdr"), pub["message"])
+
+    # 未过闸（走 _confirm_or_point 那一支）：还没「开成了」，不发通知
+    def test_on_does_not_notify_when_not_yet_confirmed(self):
+        h = Harness(self, subscribed=())
+        code, out, err = self.away_on(h.home)
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(h.client.published, [])
+
+    # 通知发不出去不影响 away on 本身：退出码仍 0，状态文件照写，stderr 多一行诊断
+    def test_on_notify_failure_does_not_change_the_outcome(self):
+        h = Harness(self)
+        h.state.acquire(owner(self.root), pane="wD:p9")
+        h.client.fail_publish = "HTTP 429"
+        code, out, err = self.away_on(h.home)
+        self.assertEqual(code, 0)
+        self.assertEqual(out.splitlines()[0], Z("cli.away.ready", slot="slot1"))
+        self.assertEqual((self.state()["away"], self.state()["target"]), (True, owner(self.root)))
+        self.assertIn("the phone was not notified", err)
+        self.assertEqual(h.client.published, [])
+
     # 未租但池里有空闲已过闸槽位：当场租下（人要走了，租约与过闸此刻落定），不开 pane；状态文件记下槽位
     def test_leases_a_confirmed_free_slot_immediately(self):
         h = Harness(self)
@@ -1442,6 +1507,58 @@ class AwayOnTest(unittest.TestCase):
         self.assertIn(Z("cli.away.off.released", slot="slot1"), out)
         self.assertIsNone(h.state.slots()["slot1"]["leased_by"])
         self.assertEqual((self.state()["away"], self.state()["slot"], self.state()["confirmed"]), (False, None, None))
+
+    # 关闭前先给手机推一条通知，且顺序是硬要求：先发通知，再释放租约（释放后槽位可能立刻被别的项目拿走）
+    def test_off_notifies_before_releasing_the_lease(self):
+        h = Harness(self)
+        self.away_on(h.home)
+        calls: list[str] = []
+        orig = ntfy_connector.request
+
+        def spy(home, req, lang, **kw):
+            calls.append(str(req.get("cmd")))
+            return orig(home, req, lang, **kw)
+
+        with mock.patch.object(ntfy_connector, "request", side_effect=spy):
+            code, out, err = run(["--home", str(h.home), "away", "off"], root=self.root, env=HERDR)
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(calls, ["notify", "release"])
+        pub = h.client.published[-1]
+        self.assertEqual(pub["title"], f"[{self.root.name}] " + Z("away.off.title"))
+        self.assertIn(Z("away.off.body"), pub["message"])
+        self.assertIsNone(h.state.slots()["slot1"]["leased_by"])
+
+    # daemon 没跑：off 本身仍要能关，但没什么可通知的（连不上）
+    def test_off_does_not_notify_when_daemon_is_not_running(self):
+        projstate.save(self.root, away=True, slot="slot1", confirmed=True, target=owner(self.root))
+        calls: list[str] = []
+        orig = ntfy_connector.request
+
+        def spy(home, req, lang, **kw):
+            calls.append(str(req.get("cmd")))
+            return orig(home, req, lang, **kw)
+
+        with mock.patch.object(ntfy_connector, "request", side_effect=spy):
+            code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "away", "off"], root=self.root, env=HERDR)
+        self.assertEqual((code, err), (0, ""))
+        self.assertNotIn("notify", calls)
+
+    # 本项目没开过（away 从没为真）：daemon 在跑也不发
+    def test_off_does_not_notify_when_away_was_never_true(self):
+        h = Harness(self)
+        projstate.save(self.root, away=False, target=owner(self.root))
+        calls: list[str] = []
+        orig = ntfy_connector.request
+
+        def spy(home, req, lang, **kw):
+            calls.append(str(req.get("cmd")))
+            return orig(home, req, lang, **kw)
+
+        with mock.patch.object(ntfy_connector, "request", side_effect=spy):
+            code, out, err = run(["--home", str(h.home), "away", "off"], root=self.root, env=HERDR)
+        self.assertEqual((code, err), (0, ""))
+        self.assertNotIn("notify", calls)
+        self.assertEqual(h.client.published, [])
 
     # 再次 away on：沿用已有租约，不租第二个
     def test_second_on_reuses_the_existing_lease(self):

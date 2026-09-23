@@ -1,4 +1,10 @@
 {
+ "away.off.body": "远程模式即将关闭，之后请回终端继续；这里的消息不再送达。",
+ "away.off.title": "远程模式即将关闭",
+ "away.on.body.daemon_no_herdr": "daemon 找不到 herdr，重启前你主动发的消息送不到，推荐让 agent 帮你重启 daemon 来使用完整功能。",
+ "away.on.body.full": "你在这里发的消息会送进终端；要拍板的事会推到这里。",
+ "away.on.body.no_herdr": "这台机器没有 herdr：你主动发的消息**不会**送到终端，只有对提问的回复能回到 agent。",
+ "away.on.title": "远程模式已开启",
  "button.accept": "采纳推荐",
  "cli.add_slot.done": "已新建 {slot}（还没确认过手机收得到通知）。下一步：在你自己的终端跑  {cli} confirm-sub {slot}",
  "cli.ask.comm_failed": "与 daemon 通信失败：{error}",
@@ -22,6 +28,7 @@
  "cli.away.daemon_no_herdr": "warning: the daemon cannot find herdr on its PATH (was it started before herdr was installed?). Phone messages cannot be delivered until it is restarted from a herdr pane: {cli} daemon --stop, then {cli} away on",
  "cli.away.io_failed": "状态文件读写失败：{error}",
  "cli.away.not_enabled": "本项目未启用远程交互模式（项目根没有 .ntfy-connector/）；要开：{cli} away on",
+ "cli.away.not_notified": "note: the phone was not notified ({why})",
  "cli.away.off.released": "已释放 {slot}",
  "cli.away.pane_failed": "在 herdr 里开不出窗格（或命令没敲进去），daemon 没有起来，远程交互模式未开启；请在终端跑 {cli} daemon --detach 后重试",
  "cli.away.path": "状态文件：{path}",

@@ -90,6 +90,13 @@ TEXTS: dict[str, dict[str, str]] = {
                          "如果这条在 ntfy app 里看得见、但通知栏没有弹出来，说明手机的通知权限还没配好："
                          "先按 README 的排查清单逐项检查（通知权限、省电策略、自启动、锁屏通知、这个 topic 没被静音），"
                          "让它弹出来之后再点按钮。只在 app 里点按钮证明不了通知会弹。"),
+        # ---- 远程模式开关卡：away on / off 时推给手机的通知
+        "away.on.title": "远程模式已开启",
+        "away.on.body.full": "你在这里发的消息会送进终端；要拍板的事会推到这里。",
+        "away.on.body.no_herdr": "这台机器没有 herdr：你主动发的消息**不会**送到终端，只有对提问的回复能回到 agent。",
+        "away.on.body.daemon_no_herdr": "daemon 找不到 herdr，重启前你主动发的消息送不到，推荐让 agent 帮你重启 daemon 来使用完整功能。",
+        "away.off.title": "远程模式即将关闭",
+        "away.off.body": "远程模式即将关闭，之后请回终端继续；这里的消息不再送达。",
         # ---- daemon 经 socket 交给 CLI 的文案
         "daemon.bad_request.too_long": "请求超过 {limit} 字节还没见到换行",
         "daemon.bad_request.not_json": "请求不是一行 JSON 对象：{error}",
@@ -190,6 +197,7 @@ TEXTS: dict[str, dict[str, str]] = {
         # agent 读的诊断，不是给人看的：两栏故意同一句英文，不随 --lang 变
         "cli.away.daemon_no_herdr": ("warning: the daemon cannot find herdr on its PATH (was it started before herdr was installed?). "
                                      "Phone messages cannot be delivered until it is restarted from a herdr pane: {cli} daemon --stop, then {cli} away on"),
+        "cli.away.not_notified": "note: the phone was not notified ({why})",
         "cli.slots.pane": "  窗格 {pane}",
         "cli.project.unresolved": "定不出当前项目（{error}）；换到一个存在的目录再跑",
         "cli.reminder": "提醒：{message}",
@@ -454,6 +462,13 @@ TEXTS: dict[str, dict[str, str]] = {
                          "If you can see this in the ntfy app but it never popped up in the notification shade, notification permissions are not set up yet: "
                          "go through the README troubleshooting list first (notification permission, battery saver, autostart, lock-screen notifications, this topic not muted), "
                          "get it to pop up, then tap the button. Tapping inside the app does not prove notifications will pop up."),
+        # ---- remote-mode switch card: pushed to the phone when away on / off runs
+        "away.on.title": "Remote mode is on",
+        "away.on.body.full": "Messages you send here are delivered into the terminal; decisions that need you are pushed here.",
+        "away.on.body.no_herdr": "This machine has no herdr: messages you send on your own **will not** reach the terminal — only replies to a question make it back to the agent.",
+        "away.on.body.daemon_no_herdr": "The daemon cannot find herdr; until it is restarted, messages you send on your own will not get through — ask the agent to restart the daemon for full functionality.",
+        "away.off.title": "Remote mode is about to turn off",
+        "away.off.body": "Remote mode is about to turn off; continue from the terminal from here on — messages here will no longer be delivered.",
         "daemon.bad_request.too_long": "request exceeded {limit} bytes without a newline",
         "daemon.bad_request.not_json": "request is not a single-line JSON object: {error}",
         "daemon.bad_request.unknown_cmd": "unknown command: {cmd}",
@@ -550,6 +565,7 @@ TEXTS: dict[str, dict[str, str]] = {
         # agent-facing diagnostic, not user-facing: deliberately identical in both columns, does not change with --lang
         "cli.away.daemon_no_herdr": ("warning: the daemon cannot find herdr on its PATH (was it started before herdr was installed?). "
                                      "Phone messages cannot be delivered until it is restarted from a herdr pane: {cli} daemon --stop, then {cli} away on"),
+        "cli.away.not_notified": "note: the phone was not notified ({why})",
         "cli.slots.pane": "  pane {pane}",
         "cli.project.unresolved": "cannot tell which project this is ({error}); run from a directory that exists",
         "cli.reminder": "note: {message}",

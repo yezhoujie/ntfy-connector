@@ -294,6 +294,13 @@ remote mode. `away status` asks the daemon for its leases and corrects the file 
 prints `state file corrected from the daemon's leases`); with no daemon it prints the file and says so. The topic name is never stored there. While
 `away` is `true`, `ask` and `notify` only use confirmed slots — nobody is at the keyboard to confirm a new one.
 
+The phone also gets a notification on its own each time the switch flips: `away on` sends one once a
+confirmed slot actually backs it, worded to say whether messages you send on your own reach the terminal
+(it depends on whether the agent is inside herdr, and whether the daemon can find herdr on its PATH);
+`away off` sends one just before it releases the lease, telling you to continue from the terminal. Neither
+notification needs anything from you, and a failure to send one never changes the exit code or the state
+file — it only adds a line to the agent's stderr.
+
 Run `away status --json` (the form meant for the agent) from the agent's herdr pane or a process started
 from it: like `ask` / `notify` / `slots` it records the current pane on the lease, and run from elsewhere it would point
 phone messages at the wrong pane. A typical rule reads: *if `.ntfy-connector/state.json` says `away: true`, use

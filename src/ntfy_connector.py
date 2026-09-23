@@ -608,10 +608,15 @@ def cmd_away(args) -> int:
             if not projstate.exists(root):
                 print(texts.t("cli.away.not_enabled", lang))  # 没开过就没什么可关的，也不留目录
                 return 0
+            home = Path(args.home)
             ident = identity(root)
+            daemon_up = probe(home) is not None  # daemon 在跑才去释放；没跑就只关开关（租约留着，文件里的 slot 也留着——它仍是事实）
+            if daemon_up and projstate.load(root).get("away") is True:
+                # 先通知手机、再释放：槽位一释放就可能立刻被别的项目拿走，通知会发不出去或发错地方
+                _send_away_notice(home, ident, lang, title=texts.t("away.off.title", lang), body=texts.t("away.off.body", lang))
             released, lease_gone = None, False
-            if probe(Path(args.home)) is not None:  # daemon 在跑才去释放；没跑就只关开关（租约留着，文件里的 slot 也留着——它仍是事实）
-                ev = request(Path(args.home), {"cmd": "release", "leased_by": ident.leased_by}, lang)  # 不带 pane：关模式不刷新注入窗格
+            if daemon_up:
+                ev = request(home, {"cmd": "release", "leased_by": ident.leased_by}, lang)  # 不带 pane：关模式不刷新注入窗格
                 if ev is not None and ev.get("event") == "released":
                     released, lease_gone = str(ev["slot"]), True
                 elif ev is not None and ev.get("kind") == "no_lease":
@@ -743,8 +748,36 @@ def away_on(home: Path, root: Path, lang: str) -> int:
             return EXIT_NEEDS_HUMAN  # 租约留着（人在键盘旁，跑完 confirm-sub 再 away on 就是它）；开关不写
     projstate.save(root, away=True, slot=slot, confirmed=subscribed, target=ident.leased_by)
     print(texts.t("cli.away.path", lang, path=projstate.state_path(root)))
+    if subscribed:
+        # 走 _confirm_or_point 那一支时还没「开成了」（手机没订阅上，通知也送不到）：不发
+        _send_away_notice(home, ident, lang, title=texts.t("away.on.title", lang), body=_away_on_body(home, lang))
     _warn_if_daemon_has_no_herdr(home, lang)
     return 0
+
+
+def _away_on_body(home: Path, lang: str) -> str:
+    """开启通知的正文三选一：不在 herdr 里就说明只有对提问的回复能回到 agent；
+    在 herdr 里但 daemon 自己视角找不到 herdr（多半装机顺序反了）就建议重启；两者都过才说消息能直接送进终端。
+
+    probe(home) 探不到状态（daemon 瞬时没应答）时也按「找不到 herdr」处理，这里刻意不学 _warn_if_daemon_has_no_herdr
+    那样遇到探不到就干脆不说话——那条只是一句可有可无的诊断，静默无妨；这条正文没有第三种「不确定」的说法可选，
+    错判成「找得到」会让手机消息在用户不知情的情况下送不到，两害相权，宁可多提醒一次重启。"""
+    if os.environ.get("HERDR_ENV") != "1":
+        return texts.t("away.on.body.no_herdr", lang)
+    status = probe(home)
+    if status is not None and status.get("herdr", {}).get("bin") is not None:
+        return texts.t("away.on.body.full", lang)
+    return texts.t("away.on.body.daemon_no_herdr", lang)
+
+
+def _send_away_notice(home: Path, ident: Identity, lang: str, *, title: str, body: str) -> None:
+    """开 / 关远程模式时尽力推一条通知给手机；两处调用都只在槽位已经过闸之后才会走到这里，直接按已过闸请求。
+    发不出去不改变调用方的结果：吞掉失败，只在 stderr 留一行诊断。"""
+    ev = request(home, {"cmd": "notify", "payload": {"title": title, "body": body}, "leased_by": ident.leased_by,
+                        "pane": ident.pane, "tag": ident.tag, "require_confirmed": True}, lang, not_sent=True)
+    if ev is None or ev.get("event") != "sent":
+        why = ev.get("message") if ev else texts.t("cli.no_response", lang)
+        err(texts.t("cli.away.not_notified", lang, why=why))
 
 
 def _warn_if_daemon_has_no_herdr(home: Path, lang: str) -> None:
