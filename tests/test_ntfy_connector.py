@@ -197,7 +197,7 @@ class AskExitCodesTest(unittest.TestCase):
         code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "ask"], json.dumps(SAMPLE))
         self.assertEqual((code, out), (3, ""))
         self.assertIn("消息未发送", err)
-        self.assertIn("ntfy-connector daemon --detach", err)
+        self.assertIn(f"{texts.CLI} daemon --detach", err)
         self.assertIn("herdr", err)
 
     # 3：daemon 中途停了，stderr 写明「已发送但」
@@ -344,7 +344,7 @@ class NotifyExitCodesTest(unittest.TestCase):
         code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "notify"], json.dumps(NOTIFY))
         self.assertEqual((code, out), (3, ""))
         self.assertIn("消息未发送", err)
-        self.assertIn("ntfy-connector daemon --detach", err)
+        self.assertIn(f"{texts.CLI} daemon --detach", err)
         h = Harness(self)
         h.client.fail_publish = "HTTP 429"
         code, out, err = run(["--home", str(h.home), "notify"], json.dumps(NOTIFY), HERDR)
@@ -395,6 +395,28 @@ class NotifyExitCodesTest(unittest.TestCase):
         with self.assertRaises(SystemExit) as cm:
             run(["--home", "/nonexistent/ntfy-connector-home", "notify", "--timeout", "5"], json.dumps(NOTIFY))
         self.assertEqual(cm.exception.code, 2)
+
+
+class DaemonEnvTest(unittest.TestCase):
+    """_spawn_daemon 在 herdr 里且 HERDR_BIN_PATH 所在目录不在 PATH 时补一份 env；其余情况沿用今天的继承行为（None）。"""
+
+    def test_prepends_the_herdr_directory_when_missing_from_path(self):
+        env = ntfy_connector._daemon_env({"HERDR_ENV": "1", "HERDR_BIN_PATH": "/opt/homebrew/bin/herdr", "PATH": "/usr/bin"})
+        assert env is not None
+        self.assertEqual(env["PATH"].split(os.pathsep)[0], "/opt/homebrew/bin")
+
+    def test_none_when_the_directory_is_already_on_path(self):
+        path = os.pathsep.join(["/opt/homebrew/bin", "/usr/bin"])
+        env = ntfy_connector._daemon_env({"HERDR_ENV": "1", "HERDR_BIN_PATH": "/opt/homebrew/bin/herdr", "PATH": path})
+        self.assertIsNone(env)
+
+    def test_none_outside_herdr(self):
+        env = ntfy_connector._daemon_env({"HERDR_ENV": "", "HERDR_BIN_PATH": "/opt/homebrew/bin/herdr", "PATH": "/usr/bin"})
+        self.assertIsNone(env)
+
+    def test_none_without_herdr_bin_path(self):
+        env = ntfy_connector._daemon_env({"HERDR_ENV": "1", "PATH": "/usr/bin"})
+        self.assertIsNone(env)
 
 
 class OtherCommandsTest(unittest.TestCase):
@@ -478,7 +500,7 @@ class ConfirmSubTest(unittest.TestCase):
         code, out, err = run(["--home", str(h.home), "confirm-sub", "slot4", "--timeout", "1"])  # run() 的 stdout 是 StringIO，不是 TTY
         self.assertEqual((code, out), (4, ""))
         self.assertIn("在你自己的终端跑", err)
-        self.assertIn("ntfy-connector confirm-sub slot4", err)
+        self.assertIn(f"{texts.CLI} confirm-sub slot4", err)
         self.assertIn("--subscribed", err)
         for t in h.store.load() or []:
             self.assertNotIn(t, err)
@@ -836,7 +858,7 @@ class ConfirmSubTest(unittest.TestCase):
     def test_commands_without_daemon(self):
         code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "slots"])
         self.assertEqual(code, 3)
-        self.assertIn("ntfy-connector daemon", err)
+        self.assertIn(f"{texts.CLI} daemon", err)
         code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "daemon", "--status"])
         self.assertEqual((code, out), (1, "daemon：未运行\n"))
 
@@ -849,6 +871,41 @@ class ConfirmSubTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("连接中", out)
         self.assertNotIn("None", out)
+
+    def _status_ev(self, herdr):
+        return {"event": "status", "pid": 999, "subscribed": True, "disconnected_for": None,
+                "pending": 0, "confirming": 0, "pool": 5, "herdr": herdr}
+
+    # --status 多打一行 daemon 自己视角的 herdr：三种情况三条文案
+    def test_status_prints_herdr_reachable(self):
+        with mock.patch.object(ntfy_connector, "probe", return_value=self._status_ev({"bin": "/usr/bin/herdr", "reachable": True, "error": None})):
+            code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "daemon", "--status"])
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn(Z("cli.status.herdr.ok", bin="/usr/bin/herdr"), out)
+
+    def test_status_prints_herdr_found_but_unreachable(self):
+        view = {"bin": "/usr/bin/herdr", "reachable": False, "error": "server_not_running"}
+        with mock.patch.object(ntfy_connector, "probe", return_value=self._status_ev(view)):
+            code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "daemon", "--status"])
+        self.assertEqual(code, 0)
+        self.assertIn(Z("cli.status.herdr.unreachable", bin="/usr/bin/herdr", error="server_not_running"), out)
+
+    def test_status_prints_herdr_missing_with_restart_hint(self):
+        view = {"bin": None, "reachable": False, "error": "not found on PATH"}
+        with mock.patch.object(ntfy_connector, "probe", return_value=self._status_ev(view)):
+            code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "daemon", "--status"])
+        self.assertEqual(code, 0)
+        self.assertIn(Z("cli.status.herdr.missing"), out)
+        self.assertIn(f"{texts.CLI} daemon --stop", out)
+
+    # 没有 herdr 键的旧形态 probe 返回值（例如别的用例换掉了整个 status 事件）：不崩，也不多打这一行
+    def test_status_without_herdr_key_prints_nothing_extra(self):
+        ev = self._status_ev(None)
+        del ev["herdr"]
+        with mock.patch.object(ntfy_connector, "probe", return_value=ev):
+            code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "daemon", "--status"])
+        self.assertEqual(code, 0)
+        self.assertNotIn("herdr", out)
 
     # --status 行尾打传输类型；探活走 socket，不看 pid 文件
     def test_status_prints_transport(self):
@@ -1137,7 +1194,7 @@ class ConfirmSubPaneTest(unittest.TestCase):
         with mock.patch("ntfy_connector.herdr_run", fake):
             code, out, err = run(["--home", str(h.home), "confirm-sub", "slot4"], env=HERDR)
         self.assertEqual((code, out), (4, ""))
-        self.assertIn("ntfy-connector confirm-sub slot4", err)
+        self.assertIn(f"{texts.CLI} confirm-sub slot4", err)
         self.assertEqual([c[1:3] for c in fake.calls], [["pane", "list"]])
 
     def test_non_tty_split_failure_exits_4(self):
@@ -1147,7 +1204,7 @@ class ConfirmSubPaneTest(unittest.TestCase):
         with mock.patch("ntfy_connector.herdr_run", fake):
             code, out, err = run(["--home", str(h.home), "confirm-sub", "slot4"], env=HERDR)
         self.assertEqual((code, out), (4, ""))
-        self.assertIn("ntfy-connector confirm-sub slot4", err)
+        self.assertIn(f"{texts.CLI} confirm-sub slot4", err)
 
     def test_non_tty_run_failure_after_split_exits_4(self):
         h = Harness(self, subscribed=())
@@ -1156,7 +1213,7 @@ class ConfirmSubPaneTest(unittest.TestCase):
         with mock.patch("ntfy_connector.herdr_run", fake):
             code, out, err = run(["--home", str(h.home), "confirm-sub", "slot4"], env=HERDR)
         self.assertEqual((code, out), (4, ""))
-        self.assertIn("ntfy-connector confirm-sub slot4", err)
+        self.assertIn(f"{texts.CLI} confirm-sub slot4", err)
         self.assertEqual([c[1:3] for c in fake.calls], [["pane", "list"], ["pane", "split"], ["pane", "run"]])
 
     def test_show_topic_and_subscribed_paths_do_not_open_panes(self):
@@ -1202,6 +1259,88 @@ class AwayOnTest(unittest.TestCase):
         self.assertEqual(self.fake.calls, [])
         self.assertEqual(h.state.slots()["slot1"]["pane"], "wD:p1")  # 顺手把租约的窗格刷新成当前窗格
 
+    # daemon 自己 PATH 上找不到 herdr、且此刻在 herdr 里：away on 成功照旧（退出码不变），但 stderr 多一句警告 + 重启指引
+    def test_daemon_missing_herdr_prints_a_stderr_warning_inside_herdr(self):
+        h = Harness(self, herdr_view=lambda: {"bin": None, "reachable": False, "error": "not found on PATH"})
+        h.state.acquire(owner(self.root), pane="wD:p9")
+        code, out, err = self.away_on(h.home)  # 默认 env=HERDR：在 herdr 里
+        self.assertEqual(code, 0)
+        self.assertEqual(out.splitlines()[0], Z("cli.away.ready", slot="slot1"))
+        self.assertIn("cannot find herdr on its PATH", err)
+        self.assertIn(f"{texts.CLI} daemon --stop", err)
+
+    # 同样的 daemon 视角，但调用方不在 herdr 里：没处重启、也没有窗格可指，不打这句警告
+    def test_daemon_missing_herdr_is_silent_outside_herdr(self):
+        h = Harness(self, herdr_view=lambda: {"bin": None, "reachable": False, "error": "not found on PATH"})
+        h.state.acquire(owner(self.root), pane="wD:p9")
+        code, out, err = self.away_on(h.home, env={})
+        self.assertEqual((code, err), (0, ""))
+
+    # 开成了：给手机推一条通知；在 herdr 里且 daemon 自己视角找得到 herdr ⇒ 消息能直接送进终端那句
+    def test_on_notifies_full_body_when_herdr_is_reachable(self):
+        h = Harness(self)
+        h.state.acquire(owner(self.root), pane="wD:p9")
+        code, out, err = self.away_on(h.home)
+        self.assertEqual((code, err), (0, ""))
+        pub = h.client.published[-1]
+        self.assertEqual(pub["title"], f"[{self.root.name}] " + Z("away.on.title"))
+        self.assertIn(Z("away.on.body.full"), pub["message"])
+
+    # 不在 herdr 里 ⇒ 说明只有对提问的回复能回到 agent
+    def test_on_notifies_no_herdr_body_outside_herdr(self):
+        h = Harness(self)
+        h.state.acquire(owner(self.root), pane="wD:p9")
+        code, out, err = self.away_on(h.home, env={})
+        self.assertEqual((code, err), (0, ""))
+        pub = h.client.published[-1]
+        self.assertEqual(pub["title"], f"[{self.root.name}] " + Z("away.on.title"))
+        self.assertIn(Z("away.on.body.no_herdr"), pub["message"])
+
+    # 在 herdr 里，但 daemon 自己 PATH 上找不到 herdr ⇒ 用户逐字定的那句，逐字核对
+    def test_on_notifies_daemon_no_herdr_body_verbatim(self):
+        h = Harness(self, herdr_view=lambda: {"bin": None, "reachable": False, "error": "not found on PATH"})
+        h.state.acquire(owner(self.root), pane="wD:p9")
+        code, out, err = self.away_on(h.home)
+        self.assertEqual(code, 0)
+        pub = h.client.published[-1]
+        self.assertIn("daemon 找不到 herdr，重启前你主动发的消息送不到，推荐让 agent 帮你重启 daemon 来使用完整功能。", pub["message"])
+        self.assertEqual(Z("away.on.body.daemon_no_herdr"), "daemon 找不到 herdr，重启前你主动发的消息送不到，推荐让 agent 帮你重启 daemon 来使用完整功能。")
+
+    # 在 herdr 里，但通知发送前那次自探（_away_on_body 里的 probe）恰好没拿到结果：按「找不到 herdr」的更安全文案处理，
+    # 不学 _warn_if_daemon_has_no_herdr 探不到就不吭声那一套——正文没有第三种「不确定」的说法
+    def test_on_notifies_daemon_no_herdr_body_when_probe_is_unreachable(self):
+        h = Harness(self)
+        h.state.acquire(owner(self.root), pane="wD:p9")
+        real_probe = ntfy_connector.probe
+
+        def probe_stub(home, **kw):
+            return real_probe(home, **kw) if "timeout" in kw else None  # _ensure_daemon 的探活带 timeout，照常放行
+
+        with mock.patch.object(ntfy_connector, "probe", probe_stub):
+            code, out, err = self.away_on(h.home)
+        self.assertEqual((code, err), (0, ""))
+        pub = h.client.published[-1]
+        self.assertIn(Z("away.on.body.daemon_no_herdr"), pub["message"])
+
+    # 未过闸（走 _confirm_or_point 那一支）：还没「开成了」，不发通知
+    def test_on_does_not_notify_when_not_yet_confirmed(self):
+        h = Harness(self, subscribed=())
+        code, out, err = self.away_on(h.home)
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(h.client.published, [])
+
+    # 通知发不出去不影响 away on 本身：退出码仍 0，状态文件照写，stderr 多一行诊断
+    def test_on_notify_failure_does_not_change_the_outcome(self):
+        h = Harness(self)
+        h.state.acquire(owner(self.root), pane="wD:p9")
+        h.client.fail_publish = "HTTP 429"
+        code, out, err = self.away_on(h.home)
+        self.assertEqual(code, 0)
+        self.assertEqual(out.splitlines()[0], Z("cli.away.ready", slot="slot1"))
+        self.assertEqual((self.state()["away"], self.state()["target"]), (True, owner(self.root)))
+        self.assertIn("the phone was not notified", err)
+        self.assertEqual(h.client.published, [])
+
     # 未租但池里有空闲已过闸槽位：当场租下（人要走了，租约与过闸此刻落定），不开 pane；状态文件记下槽位
     def test_leases_a_confirmed_free_slot_immediately(self):
         h = Harness(self)
@@ -1231,7 +1370,7 @@ class AwayOnTest(unittest.TestCase):
         h.state.acquire(owner(self.root))
         code, out, err = self.away_on(h.home, env={})
         self.assertEqual((code, out), (4, ""))
-        self.assertIn("ntfy-connector confirm-sub slot1", err)
+        self.assertIn(f"{texts.CLI} confirm-sub slot1", err)
         self.assertFalse((self.root / projstate.DIR_NAME).exists())
         self.assertEqual(self.fake.calls, [])
 
@@ -1368,6 +1507,58 @@ class AwayOnTest(unittest.TestCase):
         self.assertIn(Z("cli.away.off.released", slot="slot1"), out)
         self.assertIsNone(h.state.slots()["slot1"]["leased_by"])
         self.assertEqual((self.state()["away"], self.state()["slot"], self.state()["confirmed"]), (False, None, None))
+
+    # 关闭前先给手机推一条通知，且顺序是硬要求：先发通知，再释放租约（释放后槽位可能立刻被别的项目拿走）
+    def test_off_notifies_before_releasing_the_lease(self):
+        h = Harness(self)
+        self.away_on(h.home)
+        calls: list[str] = []
+        orig = ntfy_connector.request
+
+        def spy(home, req, lang, **kw):
+            calls.append(str(req.get("cmd")))
+            return orig(home, req, lang, **kw)
+
+        with mock.patch.object(ntfy_connector, "request", side_effect=spy):
+            code, out, err = run(["--home", str(h.home), "away", "off"], root=self.root, env=HERDR)
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(calls, ["notify", "release"])
+        pub = h.client.published[-1]
+        self.assertEqual(pub["title"], f"[{self.root.name}] " + Z("away.off.title"))
+        self.assertIn(Z("away.off.body"), pub["message"])
+        self.assertIsNone(h.state.slots()["slot1"]["leased_by"])
+
+    # daemon 没跑：off 本身仍要能关，但没什么可通知的（连不上）
+    def test_off_does_not_notify_when_daemon_is_not_running(self):
+        projstate.save(self.root, away=True, slot="slot1", confirmed=True, target=owner(self.root))
+        calls: list[str] = []
+        orig = ntfy_connector.request
+
+        def spy(home, req, lang, **kw):
+            calls.append(str(req.get("cmd")))
+            return orig(home, req, lang, **kw)
+
+        with mock.patch.object(ntfy_connector, "request", side_effect=spy):
+            code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "away", "off"], root=self.root, env=HERDR)
+        self.assertEqual((code, err), (0, ""))
+        self.assertNotIn("notify", calls)
+
+    # 本项目没开过（away 从没为真）：daemon 在跑也不发
+    def test_off_does_not_notify_when_away_was_never_true(self):
+        h = Harness(self)
+        projstate.save(self.root, away=False, target=owner(self.root))
+        calls: list[str] = []
+        orig = ntfy_connector.request
+
+        def spy(home, req, lang, **kw):
+            calls.append(str(req.get("cmd")))
+            return orig(home, req, lang, **kw)
+
+        with mock.patch.object(ntfy_connector, "request", side_effect=spy):
+            code, out, err = run(["--home", str(h.home), "away", "off"], root=self.root, env=HERDR)
+        self.assertEqual((code, err), (0, ""))
+        self.assertNotIn("notify", calls)
+        self.assertEqual(h.client.published, [])
 
     # 再次 away on：沿用已有租约，不租第二个
     def test_second_on_reuses_the_existing_lease(self):

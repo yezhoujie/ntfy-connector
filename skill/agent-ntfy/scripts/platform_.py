@@ -25,7 +25,7 @@ import os
 import signal
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -50,8 +50,8 @@ def is_windows() -> bool:
     return _platform() == "win32"
 
 
-def spawn_detached(argv: list[str]) -> subprocess.Popen:
-    """起一个脱离当前会话 / 控制台的子进程，三路标准流全接 DEVNULL。"""
+def spawn_detached(argv: list[str], *, env: Mapping[str, str] | None = None) -> subprocess.Popen:
+    """起一个脱离当前会话 / 控制台的子进程，三路标准流全接 DEVNULL。env 不给就是 Popen 的缺省（原样继承当前环境）。"""
     if is_windows():
         return subprocess.Popen(
             argv,
@@ -59,6 +59,7 @@ def spawn_detached(argv: list[str]) -> subprocess.Popen:
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            env=env,
         )
     return subprocess.Popen(
         argv,
@@ -66,6 +67,7 @@ def spawn_detached(argv: list[str]) -> subprocess.Popen:
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        env=env,
     )
 
 

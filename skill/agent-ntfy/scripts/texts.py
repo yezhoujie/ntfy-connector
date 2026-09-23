@@ -2,11 +2,18 @@
 
 两列 zh / en，key 集合必须完全相同（单测断言）——防止只加了中文忘了英文。
 表里的串不含 topic / 路径等运行时值，一律 {占位} 由调用方填；不带参数取值时不做 format，字面的花括号原样保留。
+唯一的例外是 {cli}：文案里凡是「去跑某条命令」的指令句都用它占位，t() 会自动填成当前这次运行的
+启动命令（见 self_command），调用方不必显式传——短名不是安装后进 PATH 的名字，直接照抄会 command not found。
 
 语言由调用方显式传，本模块不读环境变量。解析只在两处发生：ask 入口（JSON lang 压过进程语言）与
 daemon / CLI 进程入口（--lang → NTFY_CONNECTOR_LANG → 系统 locale → en），深层模块只认传进来的 lang。
 控制标记（__ntfy-connector:…__）与 Title 里的 [<tag>] 是协议，不在表里、不翻译。
 """
+
+import ntpath
+import os
+import posixpath
+import sys
 
 LANGS = ("zh", "en")
 DEFAULT_LANG = "en"
@@ -64,7 +71,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "receipt.stopping_uncertain": "daemon 正在停止，无法确认你刚才的消息是否送达，请稍后再发。",
         "receipt.superseded": "同一槽位有了新的回执，请看最新那条。",
         "herdr.timeout": "herdr {seconds} 秒无响应",
-        "herdr.missing": "herdr 没装或不在 PATH 上",
+        "herdr.missing": "herdr 没装或不在 PATH 上；daemon 多半比 herdr 先启动，请在 herdr 窗格里重启它：{cli} daemon --stop，再 {cli} away on",
         "herdr.rc": "退出码 {rc}",
         # ---- 控制按钮的结果
         "control.released": "槽位 {slot} 已释放，可以租给下一个目标。",
@@ -83,6 +90,13 @@ TEXTS: dict[str, dict[str, str]] = {
                          "如果这条在 ntfy app 里看得见、但通知栏没有弹出来，说明手机的通知权限还没配好："
                          "先按 README 的排查清单逐项检查（通知权限、省电策略、自启动、锁屏通知、这个 topic 没被静音），"
                          "让它弹出来之后再点按钮。只在 app 里点按钮证明不了通知会弹。"),
+        # ---- 远程模式开关卡：away on / off 时推给手机的通知
+        "away.on.title": "远程模式已开启",
+        "away.on.body.full": "你在这里发的消息会送进终端；要拍板的事会推到这里。",
+        "away.on.body.no_herdr": "这台机器没有 herdr：你主动发的消息**不会**送到终端，只有对提问的回复能回到 agent。",
+        "away.on.body.daemon_no_herdr": "daemon 找不到 herdr，重启前你主动发的消息送不到，推荐让 agent 帮你重启 daemon 来使用完整功能。",
+        "away.off.title": "远程模式即将关闭",
+        "away.off.body": "远程模式即将关闭，之后请回终端继续；这里的消息不再送达。",
         # ---- daemon 经 socket 交给 CLI 的文案
         "daemon.bad_request.too_long": "请求超过 {limit} 字节还没见到换行",
         "daemon.bad_request.not_json": "请求不是一行 JSON 对象：{error}",
@@ -91,7 +105,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "daemon.bad_request.ask_args": "ask 要给非空 leased_by 与正数 timeout",
         "daemon.bad_request.notify_args": "notify 要给非空 leased_by",
         "daemon.bad_request.confirm_timeout": "confirm-sub 的 timeout 要是正数",
-        "daemon.unknown_slot": "没有这个槽位：{slot}（ntfy-connector slots 看现有的）",
+        "daemon.unknown_slot": "没有这个槽位：{slot}（{cli} slots 看现有的）",
         "daemon.no_lease": "这个目标没有租着任何槽位",
         "daemon.release.active": "槽位 {slot} 正有提问等回复，不能释放",
         "daemon.release.confirming": "槽位 {slot} 正在做可达性确认，不能释放",
@@ -100,11 +114,11 @@ TEXTS: dict[str, dict[str, str]] = {
         "daemon.bad_request.not_object": "请求不是一行 JSON 对象：顶层不是对象",
         "daemon.busy.pending": "这个目标已有一个提问在 {slot} 上等回复，先等它结束",
         "daemon.busy.confirming": "槽位 {slot} 正在做可达性确认，等它完成后重试",
-        "daemon.no_free_slot": "{n} 个槽位都在被租用，占用情况见下。把它告诉用户，由用户决定：去某个项目关闭远程模式（释放那个槽位），或新建一个槽位（ntfy-connector add-slot，然后 away on）。别的项目的租约不能替它释放",
-        "daemon.no_confirmed_slot": "远程交互模式下只能用已过闸的槽位，而已过闸的都在被租用，占用情况见下。等用户回到终端决定：去某个项目关闭远程模式，或新建槽位并过闸（ntfy-connector add-slot 后 confirm-sub）",
-        "daemon.release.not_yours": "槽位 {slot} 是 {holder} 租的，不是本项目的，不能替它释放；要释放它，请用户去那个项目关闭远程模式（在那个项目里跑 ntfy-connector away off）",
+        "daemon.no_free_slot": "{n} 个槽位都在被租用，占用情况见下。把它告诉用户，由用户决定：去某个项目关闭远程模式（释放那个槽位），或新建一个槽位（{cli} add-slot，然后 away on）。别的项目的租约不能替它释放",
+        "daemon.no_confirmed_slot": "远程交互模式下只能用已过闸的槽位，而已过闸的都在被租用，占用情况见下。等用户回到终端决定：去某个项目关闭远程模式，或新建槽位并过闸（{cli} add-slot 后 confirm-sub）",
+        "daemon.release.not_yours": "槽位 {slot} 是 {holder} 租的，不是本项目的，不能替它释放；要释放它，请用户去那个项目关闭远程模式（在那个项目里跑 {cli} away off）",
         "daemon.bad_request.lease_args": "lease 需要 leased_by",
-        "daemon.unconfirmed": "槽位 {slot} 还没确认过手机收得到通知。请用户在自己的终端跑 ntfy-connector confirm-sub {slot}，按提示订阅并点按钮，然后重试",
+        "daemon.unconfirmed": "槽位 {slot} 还没确认过手机收得到通知。请用户在自己的终端跑 {cli} confirm-sub {slot}，按提示订阅并点按钮，然后重试",
         "daemon.publish_failed": "向 ntfy 发布失败：{error}",
         "daemon.publish_failed.confirm": "向 ntfy 发布测试消息失败：{error}",
         "daemon.warning.disconnected_at_send": "ntfy 订阅目前断开、仍在重连；提问已发出，回复要等恢复后回放",
@@ -119,8 +133,8 @@ TEXTS: dict[str, dict[str, str]] = {
         "daemon.confirm.mark_failed": "按钮已收到，但订阅状态落盘失败（看 daemon 日志）；修好后再跑一次 confirm-sub",
         # ---- CLI 人读输出
         "cli.start_hint": ("daemon 没在跑。启动方式：\n"
-                           "  herdr 内 ：另开一个 pane 跑  ntfy-connector daemon      （可见、herdr 管生命周期）\n"
-                           "  非 herdr ：ntfy-connector daemon --detach              （脱离会话，靠 --status / --stop 管）\n"
+                           "  herdr 内 ：另开一个 pane 跑  {cli} daemon      （可见、herdr 管生命周期）\n"
+                           "  非 herdr ：{cli} daemon --detach              （脱离会话，靠 --status / --stop 管）\n"
                            "  ⚠️ 别用 agent 自己内部的 shell 或后台任务起它——agent 一退出它就跟着没了"),
         "cli.connect_failed": "连不上 daemon（{path}：{error}）",
         "cli.connect_failed.not_sent": "连不上 daemon（{path}：{error}）。消息未发送。",
@@ -163,7 +177,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.away.slot.none": "槽位：未租用（首次 ask 时自动租）",
         "cli.away.target": "目标身份：{target}",
         "cli.away.updated": "更新于 {updated}",
-        "cli.away.not_enabled": "本项目未启用远程交互模式（项目根没有 .ntfy-connector/）；要开：ntfy-connector away on",
+        "cli.away.not_enabled": "本项目未启用远程交互模式（项目根没有 .ntfy-connector/）；要开：{cli} away on",
         "cli.away.io_failed": "状态文件读写失败：{error}",
         "cli.away.unverified": "daemon 未运行，未校对（以上是状态文件里的记录）",
         "cli.away.corrected": "已按 daemon 的租约校正状态文件",
@@ -179,7 +193,11 @@ TEXTS: dict[str, dict[str, str]] = {
                                 "  让用户去那个窗格完成订阅并按回车，再在手机通知栏点按钮"),
         "cli.away.daemon_failed": "daemon 没有起来（{seconds} 秒内探不到），远程交互模式未开启；看日志 {log}",
         "cli.away.unwritable": "状态目录 {path} 不可写（已存在但不是目录，或没有写权限）",
-        "cli.away.pane_failed": "在 herdr 里开不出窗格（或命令没敲进去），daemon 没有起来，远程交互模式未开启；请在终端跑 ntfy-connector daemon --detach 后重试",
+        "cli.away.pane_failed": "在 herdr 里开不出窗格（或命令没敲进去），daemon 没有起来，远程交互模式未开启；请在终端跑 {cli} daemon --detach 后重试",
+        # agent 读的诊断，不是给人看的：两栏故意同一句英文，不随 --lang 变
+        "cli.away.daemon_no_herdr": ("warning: the daemon cannot find herdr on its PATH (was it started before herdr was installed?). "
+                                     "Phone messages cannot be delivered until it is restarted from a herdr pane: {cli} daemon --stop, then {cli} away on"),
+        "cli.away.not_notified": "note: the phone was not notified ({why})",
         "cli.slots.pane": "  窗格 {pane}",
         "cli.project.unresolved": "定不出当前项目（{error}）；换到一个存在的目录再跑",
         "cli.reminder": "提醒：{message}",
@@ -207,7 +225,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.slots.state.confirming": "确认中",
         "cli.released": "已释放 {slot}",
         "cli.confirm.topic": "{slot} 的 topic：{topic}\n订阅地址：{url}",
-        "cli.confirm.topic_hint": ("topic 名只在你自己的终端里显示：请在你自己的终端跑  ntfy-connector confirm-sub {slot}\n"
+        "cli.confirm.topic_hint": ("topic 名只在你自己的终端里显示：请在你自己的终端跑  {cli} confirm-sub {slot}\n"
                                    "  跑完它会打印一句话，请把那句话发回给 agent（没有 herdr 时不会有人通知 agent 结果）\n"
                                    "  用户已经在手机上订阅过就加 --subscribed（不显示 topic，非终端也能跑）；只想看 topic 名用 --show-topic（会进调用方的输出）"),
         "cli.confirm.guide": "在手机 ntfy app 里订阅上面这个 topic；订阅好后按回车，我会发一条带按钮的测试通知——看到它弹出来、点按钮，确认就完成了。\n⚠️ 按回车、点按钮之前别关这个窗格 / 终端：关了确认就取消，要重来。",
@@ -223,7 +241,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.confirm.report.timeout": "{slot} 确认超时：用户没在时限内按回车 / 点按钮；要重来就再跑一次 confirm-sub {slot}",
         "cli.confirm.report.cancelled": "{slot} 的确认被中断（Ctrl-C）；要重来就再跑一次 confirm-sub {slot}",
         "cli.confirm.report.failed": "{slot} 确认失败（退出码 {rc}）；报错在那个窗格里",
-        "cli.confirm.report_failed": "结果没能送回窗格 {pane} 的 agent（{why}）；它可以用 ntfy-connector slots 查",
+        "cli.confirm.report_failed": "结果没能送回窗格 {pane} 的 agent（{why}）；它可以用 {cli} slots 查",
         "cli.confirm.timeout": "{seconds} 秒内没有收到按钮点击，确认未完成。通知没弹出来？按 README 的排查清单检查后再跑一次",
         "cli.confirm.timeout_no_enter": "{seconds} 秒内没等到回车，确认未完成；测试通知还没发出。订阅好之后再跑一次",
         "cli.confirm.disconnected": "daemon 连接中断，确认未完成",
@@ -237,7 +255,7 @@ TEXTS: dict[str, dict[str, str]] = {
                                     "  2. 订阅好后在该窗格按回车，会收到一条带按钮的测试通知\n"
                                     "  3. 在手机通知栏点按钮——结果会以一行 [ntfy-connector] slotN 已过闸 / 超时 / 被中断 注入你的会话，不必轮询 slots\n"
                                     "  ⚠️ 按回车、点按钮之前别关那个窗格（关了确认就取消，且不会有结果送回）；成功后窗格会问要不要关掉"),
-        "cli.add_slot.done": "已新建 {slot}（还没确认过手机收得到通知）。下一步：在你自己的终端跑  ntfy-connector confirm-sub {slot}",
+        "cli.add_slot.done": "已新建 {slot}（还没确认过手机收得到通知）。下一步：在你自己的终端跑  {cli} confirm-sub {slot}",
         "cli.status.not_running": "daemon：未运行",
         "cli.status.no_socket": "daemon：无应答（pid 文件 {pid} 仍在，可能已死）",
         "cli.status.transport": "  传输：{transport}",
@@ -245,6 +263,9 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.status.sub.connecting": "连接中",
         "cli.status.sub.disconnected": "断开 {seconds} 秒",
         "cli.status.line": "daemon：pid {pid}  订阅：{sub}  等待中的提问：{pending}  确认中：{confirming}  槽位：{pool}",
+        "cli.status.herdr.ok": "herdr（daemon 视角）：可达，路径 {bin}",
+        "cli.status.herdr.unreachable": "herdr（daemon 视角）：{bin} 在，但没有应答（{error}）",
+        "cli.status.herdr.missing": "herdr（daemon 视角）：不在 daemon 的 PATH 上——请在 herdr 窗格里重启它：{cli} daemon --stop，再 {cli} away on",
         "cli.stop.no_ack": "daemon（pid {pid}）没有确认停止（{other}）；请手动核实",
         "cli.stop.no_response": "无回应",
         "cli.stop.done": "daemon：pid {pid} 已停",
@@ -252,7 +273,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.detach.already": "已有 daemon 在跑",
         "cli.detach.died": "daemon 没有起来（退出码 {rc}），看 {log}",
         "cli.detach.started": "daemon：已在后台启动，pid {pid}（日志 {log}）",
-        "cli.detach.not_ready": "daemon（pid {pid}）5 秒内还没就绪，仍在启动；稍后用 ntfy-connector daemon --status 看，日志 {log}",
+        "cli.detach.not_ready": "daemon（pid {pid}）5 秒内还没就绪，仍在启动；稍后用 {cli} daemon --status 看，日志 {log}",
         # ---- 校验报错（validate）
         "validate.header": "ntfy-connector ask: 输入校验未通过（{n} 处），全部修正后重试，消息未发送。",
         "validate.field.body": "正文",
@@ -424,7 +445,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "receipt.stopping_uncertain": "The daemon is stopping; can't tell whether your message was delivered. Please resend later.",
         "receipt.superseded": "This slot has a newer receipt — see the latest one.",
         "herdr.timeout": "herdr gave no response within {seconds} s",
-        "herdr.missing": "herdr is not installed or not on PATH",
+        "herdr.missing": "herdr is not installed or not on PATH; the daemon was probably started before herdr was installed — restart it from a herdr pane: {cli} daemon --stop, then {cli} away on",
         "herdr.rc": "exit code {rc}",
         "control.released": "Slot {slot} released; it can be leased to the next target.",
         "control.busy_active": "Slot {slot} is in use (a question is waiting for a reply); not released.",
@@ -441,6 +462,13 @@ TEXTS: dict[str, dict[str, str]] = {
                          "If you can see this in the ntfy app but it never popped up in the notification shade, notification permissions are not set up yet: "
                          "go through the README troubleshooting list first (notification permission, battery saver, autostart, lock-screen notifications, this topic not muted), "
                          "get it to pop up, then tap the button. Tapping inside the app does not prove notifications will pop up."),
+        # ---- remote-mode switch card: pushed to the phone when away on / off runs
+        "away.on.title": "Remote mode is on",
+        "away.on.body.full": "Messages you send here are delivered into the terminal; decisions that need you are pushed here.",
+        "away.on.body.no_herdr": "This machine has no herdr: messages you send on your own **will not** reach the terminal — only replies to a question make it back to the agent.",
+        "away.on.body.daemon_no_herdr": "The daemon cannot find herdr; until it is restarted, messages you send on your own will not get through — ask the agent to restart the daemon for full functionality.",
+        "away.off.title": "Remote mode is about to turn off",
+        "away.off.body": "Remote mode is about to turn off; continue from the terminal from here on — messages here will no longer be delivered.",
         "daemon.bad_request.too_long": "request exceeded {limit} bytes without a newline",
         "daemon.bad_request.not_json": "request is not a single-line JSON object: {error}",
         "daemon.bad_request.unknown_cmd": "unknown command: {cmd}",
@@ -448,7 +476,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "daemon.bad_request.ask_args": "ask needs a non-empty leased_by and a positive timeout",
         "daemon.bad_request.notify_args": "notify needs a non-empty leased_by",
         "daemon.bad_request.confirm_timeout": "confirm-sub timeout must be positive",
-        "daemon.unknown_slot": "no such slot: {slot} (run ntfy-connector slots to list them)",
+        "daemon.unknown_slot": "no such slot: {slot} (run {cli} slots to list them)",
         "daemon.no_lease": "this target holds no slot",
         "daemon.release.active": "slot {slot} has a question waiting for a reply; can't release it",
         "daemon.release.confirming": "slot {slot} is in the middle of a reachability check; can't release it",
@@ -457,11 +485,11 @@ TEXTS: dict[str, dict[str, str]] = {
         "daemon.bad_request.not_object": "request is not a single-line JSON object: the top level is not an object",
         "daemon.busy.pending": "this target already has a question waiting on {slot}; wait for it to finish",
         "daemon.busy.confirming": "slot {slot} is in the middle of a reachability check; retry once it finishes",
-        "daemon.no_free_slot": "All {n} slots are leased; occupancy below. Tell the user and let them decide: turn remote mode off in one of those projects (which releases its slot), or add a slot (ntfy-connector add-slot, then away on). Never release another project's lease for it",
-        "daemon.no_confirmed_slot": "In remote mode only confirmed slots can be used, and every confirmed slot is leased; occupancy below. Wait for the user to return and decide: turn remote mode off in one of those projects, or add a slot and confirm it (ntfy-connector add-slot, then confirm-sub)",
-        "daemon.release.not_yours": "slot {slot} is leased by {holder}, not by this project; you cannot release it for them. To free it, the user turns remote mode off in that project (ntfy-connector away off run there)",
+        "daemon.no_free_slot": "All {n} slots are leased; occupancy below. Tell the user and let them decide: turn remote mode off in one of those projects (which releases its slot), or add a slot ({cli} add-slot, then away on). Never release another project's lease for it",
+        "daemon.no_confirmed_slot": "In remote mode only confirmed slots can be used, and every confirmed slot is leased; occupancy below. Wait for the user to return and decide: turn remote mode off in one of those projects, or add a slot and confirm it ({cli} add-slot, then confirm-sub)",
+        "daemon.release.not_yours": "slot {slot} is leased by {holder}, not by this project; you cannot release it for them. To free it, the user turns remote mode off in that project ({cli} away off run there)",
         "daemon.bad_request.lease_args": "lease needs leased_by",
-        "daemon.unconfirmed": "Slot {slot} has not been confirmed to reach the phone yet. Ask the user to run ntfy-connector confirm-sub {slot} in their own terminal, subscribe and tap the button as prompted, then retry",
+        "daemon.unconfirmed": "Slot {slot} has not been confirmed to reach the phone yet. Ask the user to run {cli} confirm-sub {slot} in their own terminal, subscribe and tap the button as prompted, then retry",
         "daemon.publish_failed": "publishing to ntfy failed: {error}",
         "daemon.publish_failed.confirm": "publishing the test message to ntfy failed: {error}",
         "daemon.warning.disconnected_at_send": "the ntfy subscription is currently down and reconnecting; the question went out, the reply will be replayed once it recovers",
@@ -475,8 +503,8 @@ TEXTS: dict[str, dict[str, str]] = {
         "daemon.confirm.busy_confirming": "slot {slot} is already being confirmed; wait for that to finish",
         "daemon.confirm.mark_failed": "button received, but saving the subscription state failed (see the daemon log); fix it and run confirm-sub again",
         "cli.start_hint": ("The daemon is not running. Start it:\n"
-                           "  inside herdr : open another pane and run  ntfy-connector daemon      (visible, herdr owns its lifetime)\n"
-                           "  outside herdr: ntfy-connector daemon --detach                     (detached; manage with --status / --stop)\n"
+                           "  inside herdr : open another pane and run  {cli} daemon      (visible, herdr owns its lifetime)\n"
+                           "  outside herdr: {cli} daemon --detach              (detached; manage with --status / --stop)\n"
                            "  ⚠️ don't start it from the agent's own shell or as its background task — it dies with the agent"),
         "cli.connect_failed": "can't connect to the daemon ({path}: {error})",
         "cli.connect_failed.not_sent": "can't connect to the daemon ({path}: {error}). Message NOT sent.",
@@ -518,7 +546,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.away.slot.none": "slot: none leased yet (the first ask leases one)",
         "cli.away.target": "target: {target}",
         "cli.away.updated": "updated {updated}",
-        "cli.away.not_enabled": "remote mode is not enabled for this project (no .ntfy-connector/ at the project root); to enable: ntfy-connector away on",
+        "cli.away.not_enabled": "remote mode is not enabled for this project (no .ntfy-connector/ at the project root); to enable: {cli} away on",
         "cli.away.io_failed": "could not read or write the state file: {error}",
         "cli.away.unverified": "daemon not running; not verified (the above is what the state file says)",
         "cli.away.corrected": "state file corrected from the daemon's leases",
@@ -533,7 +561,11 @@ TEXTS: dict[str, dict[str, str]] = {
                                 "  have the user finish subscribing and press Enter in that pane, then tap the button on the phone"),
         "cli.away.daemon_failed": "the daemon did not come up (not reachable within {seconds} s); remote mode NOT enabled. See the log {log}",
         "cli.away.unwritable": "state directory {path} is not writable (exists but is not a directory, or no write permission)",
-        "cli.away.pane_failed": "could not open a herdr pane (or the command did not get typed in); the daemon was not started and remote mode is NOT enabled. Run ntfy-connector daemon --detach in a terminal, then retry",
+        "cli.away.pane_failed": "could not open a herdr pane (or the command did not get typed in); the daemon was not started and remote mode is NOT enabled. Run {cli} daemon --detach in a terminal, then retry",
+        # agent-facing diagnostic, not user-facing: deliberately identical in both columns, does not change with --lang
+        "cli.away.daemon_no_herdr": ("warning: the daemon cannot find herdr on its PATH (was it started before herdr was installed?). "
+                                     "Phone messages cannot be delivered until it is restarted from a herdr pane: {cli} daemon --stop, then {cli} away on"),
+        "cli.away.not_notified": "note: the phone was not notified ({why})",
         "cli.slots.pane": "  pane {pane}",
         "cli.project.unresolved": "cannot tell which project this is ({error}); run from a directory that exists",
         "cli.reminder": "note: {message}",
@@ -561,7 +593,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.slots.state.confirming": "confirming",
         "cli.released": "released {slot}",
         "cli.confirm.topic": "topic for {slot}: {topic}\nsubscribe URL: {url}",
-        "cli.confirm.topic_hint": ("The topic name is only shown in your own terminal: run  ntfy-connector confirm-sub {slot}  there yourself.\n"
+        "cli.confirm.topic_hint": ("The topic name is only shown in your own terminal: run  {cli} confirm-sub {slot}  there yourself.\n"
                                    "  When it finishes it prints one line to send back to the agent (without herdr nothing tells the agent the result).\n"
                                    "  If the user already subscribed on the phone, add --subscribed (no topic shown, works outside a terminal); to only print the topic use --show-topic (it will land in the caller's output)"),
         "cli.confirm.guide": "Subscribe to the topic above in the ntfy app on your phone. Once subscribed, press Enter and I'll send a test notification with a button — when it pops up, tap the button and the check is done.\n⚠️ Don't close this pane / terminal before pressing Enter and tapping the button: closing it cancels the check and you start over.",
@@ -577,7 +609,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.confirm.report.timeout": "{slot} check timed out: the user did not press Enter / tap the button in time; run confirm-sub {slot} again to retry",
         "cli.confirm.report.cancelled": "{slot} check was interrupted (Ctrl-C); run confirm-sub {slot} again to retry",
         "cli.confirm.report.failed": "{slot} check failed (exit code {rc}); the error is in that pane",
-        "cli.confirm.report_failed": "could not send the result back to the agent in pane {pane} ({why}); it can check with ntfy-connector slots",
+        "cli.confirm.report_failed": "could not send the result back to the agent in pane {pane} ({why}); it can check with {cli} slots",
         "cli.confirm.timeout": "no button tap within {seconds} s; confirmation not completed. Nothing popped up? Go through the README troubleshooting list and run it again",
         "cli.confirm.timeout_no_enter": "no Enter within {seconds} s; confirmation not completed and the test notification was never sent. Subscribe first, then run it again",
         "cli.confirm.disconnected": "connection to the daemon lost; confirmation not completed",
@@ -591,7 +623,7 @@ TEXTS: dict[str, dict[str, str]] = {
                                     "  2. once subscribed, press Enter in that pane — a test notification with a button arrives\n"
                                     "  3. tap the button in the notification shade — the result comes back to you as one line [ntfy-connector] slotN is confirmed / timed out / interrupted; no need to poll slots\n"
                                     "  ⚠️ don't close that pane before pressing Enter and tapping the button (closing cancels the check and nothing is sent back); on success the pane offers to close itself"),
-        "cli.add_slot.done": "added {slot} (not yet confirmed to reach the phone). Next: run  ntfy-connector confirm-sub {slot}  in your own terminal",
+        "cli.add_slot.done": "added {slot} (not yet confirmed to reach the phone). Next: run  {cli} confirm-sub {slot}  in your own terminal",
         "cli.status.not_running": "daemon: not running",
         "cli.status.no_socket": "daemon: no answer (pid file {pid} still there; it may have died)",
         "cli.status.transport": "  transport: {transport}",
@@ -599,6 +631,9 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.status.sub.connecting": "connecting",
         "cli.status.sub.disconnected": "down for {seconds} s",
         "cli.status.line": "daemon: pid {pid}  subscription: {sub}  pending questions: {pending}  confirming: {confirming}  slots: {pool}",
+        "cli.status.herdr.ok": "herdr (daemon's view): reachable via {bin}",
+        "cli.status.herdr.unreachable": "herdr (daemon's view): {bin} found but not answering ({error})",
+        "cli.status.herdr.missing": "herdr (daemon's view): not found on the daemon's PATH — restart it from a herdr pane: {cli} daemon --stop, then {cli} away on",
         "cli.stop.no_ack": "daemon (pid {pid}) did not acknowledge the stop ({other}); please check by hand",
         "cli.stop.no_response": "no response",
         "cli.stop.done": "daemon: pid {pid} stopped",
@@ -606,7 +641,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "cli.detach.already": "a daemon is already running",
         "cli.detach.died": "the daemon did not come up (exit code {rc}), see {log}",
         "cli.detach.started": "daemon: started in the background, pid {pid} (log {log})",
-        "cli.detach.not_ready": "daemon (pid {pid}) not ready within 5 s, still starting; check later with ntfy-connector daemon --status, log {log}",
+        "cli.detach.not_ready": "daemon (pid {pid}) not ready within 5 s, still starting; check later with {cli} daemon --status, log {log}",
         "validate.header": "ntfy-connector ask: input validation failed ({n} issue(s)); fix them all and retry. Message NOT sent.",
         "validate.field.body": "body",
         "validate.hint.title": "the one-line hook shown in the notification shade — the preview shows nothing else",
@@ -749,14 +784,53 @@ def resolve(explicit: object, env: object) -> str:
     return DEFAULT_LANG
 
 
+_PLACEHOLDER_ENTRY = "<skill dir>/scripts/ntfy_connector.py"
+
+
+def self_command(entry: str | None = None, platform: str | None = None) -> str:
+    """当前这次运行可以直接复制粘贴去再跑一遍的命令：解释器 + 加双引号的脚本绝对路径。
+
+    entry 缺省取运行中的入口脚本路径（sys.argv[0]），按真实宿主文件系统解析、判断文件是否存在，
+    取不到或不存在时退回占位路径，不抛异常——这一支必须用宿主自己的路径语义，因为问的是「这台机器上
+    这个文件在不在」，与 platform 参数（只影响下面怎么显示）无关。
+    显式传入 entry 时不校验是否真实存在（供测试与其它场景注入任意路径），按 platform 对应的路径语义
+    （win32 用 ntpath、其余用 posixpath）绝对化，不借道宿主的 os.path——否则宿主是 posix 时，一个已经
+    带盘符的 win32 绝对路径会被误判成相对路径、拼上宿主 cwd。
+    platform 缺省取 sys.platform，win32 用 python 且只转义路径里的双引号（反斜杠是分隔符）；
+    其余平台用 python3，双引号与反斜杠都转义。
+    """
+    plat = sys.platform if platform is None else platform
+    interpreter = "python" if plat == "win32" else "python3"
+    using_default_entry = entry is None
+    if using_default_entry:
+        entry = sys.argv[0] if sys.argv else ""
+    if not entry or (using_default_entry and not os.path.exists(os.path.abspath(entry))):
+        return f'{interpreter} "{_PLACEHOLDER_ENTRY}"'
+    if using_default_entry:
+        path = os.path.abspath(entry)
+    else:
+        path = (ntpath if plat == "win32" else posixpath).abspath(entry)
+    if plat == "win32":
+        escaped = path.replace('"', '\\"')
+    else:
+        escaped = path.replace("\\", "\\\\").replace('"', '\\"')
+    return f'{interpreter} "{escaped}"'
+
+
+CLI = self_command()
+
+
 def t(key: str, lang: str, **fmt) -> str:
     """取一条固定文案。lang 不是 zh / en 或 key 不存在都抛 KeyError——那是调用方的 bug，不能静默回退成别的语言。
 
     占位参数里的 Ref 与带 text(lang) 的对象按同一语言解析后再填进去。
+    含 {cli} 的文案由这里自动补上当前的启动命令（见 self_command），调用方不必显式传。
     """
     if lang not in TEXTS:
         raise KeyError(f"unsupported lang {lang!r}")
     text = TEXTS[lang][key]
+    if "{cli}" in text:
+        fmt.setdefault("cli", CLI)
     if not fmt:
         return text
     resolved = {k: (t(v.key, lang, **v.fmt) if isinstance(v, Ref) else v.text(lang) if callable(getattr(v, "text", None)) else v)

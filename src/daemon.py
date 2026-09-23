@@ -192,6 +192,7 @@ class Cursor:
 class Daemon:
     def __init__(self, home: Path = HOME_DIR, *, client: NtfyClient | None = None, store: SecretStore | None = None,
                  pool_size: int | None = None, log_to_stderr: bool = False, herdr: inject.Runner | None = None,
+                 herdr_view: Callable[[], dict] | None = None,
                  lang: str = texts.DEFAULT_LANG,
                  backoff_base: float = BACKOFF_BASE, backoff_max: float = BACKOFF_MAX,
                  warn_after_failures: int = WARN_AFTER_FAILURES, warn_after_seconds: float = WARN_AFTER_SECONDS):
@@ -199,6 +200,9 @@ class Daemon:
         self.paths = paths(self.home)
         self.client = client or NtfyClient()
         self._herdr: inject.Runner = herdr or inject.run_herdr
+        # status 里带的「daemon 自己视角的 herdr」；缺省现查（用上面这个 Runner），测试可以整份换掉，
+        # 不必让 status 依赖测试宿主真实 PATH 上有没有 herdr
+        self._herdr_view: Callable[[], dict] = herdr_view or (lambda: inject.herdr_view(run=self._herdr))
         # 没有 ask 上下文的一切（投递失败回执 / 关停回执 / 解析不出请求时的报错）用这个语言；由进程入口解析环境变量后传入，这里不读环境
         if not texts.is_lang(lang):
             raise DaemonError("bad_lang", value=repr(lang))  # 不静默回退：语言错了整个 daemon 的文案都会错
@@ -662,7 +666,7 @@ class Daemon:
                 "disconnected_for": None if self._connected or self._disconnected_since is None
                 else round(time.monotonic() - self._disconnected_since, 1),
                 "pending": len(self._pending), "confirming": len(self._confirming), "pool": len(self._topics),
-                "cursor": self._cursor.since(), "injecting": len(self._inflight)}
+                "cursor": self._cursor.since(), "injecting": len(self._inflight), "herdr": self._herdr_view()}
 
     def _unknown_slot(self, slot, lang: str) -> dict:
         """客户端给的槽位名不在池子里 / 形态不对：是输入错（kind=unknown_slot），不是状态层坏了（kind=state）。"""

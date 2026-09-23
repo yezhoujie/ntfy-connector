@@ -53,7 +53,7 @@ import socket
 import subprocess
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import NamedTuple
 
@@ -608,10 +608,15 @@ def cmd_away(args) -> int:
             if not projstate.exists(root):
                 print(texts.t("cli.away.not_enabled", lang))  # 没开过就没什么可关的，也不留目录
                 return 0
+            home = Path(args.home)
             ident = identity(root)
+            daemon_up = probe(home) is not None  # daemon 在跑才去释放；没跑就只关开关（租约留着，文件里的 slot 也留着——它仍是事实）
+            if daemon_up and projstate.load(root).get("away") is True:
+                # 先通知手机、再释放：槽位一释放就可能立刻被别的项目拿走，通知会发不出去或发错地方
+                _send_away_notice(home, ident, lang, title=texts.t("away.off.title", lang), body=texts.t("away.off.body", lang))
             released, lease_gone = None, False
-            if probe(Path(args.home)) is not None:  # daemon 在跑才去释放；没跑就只关开关（租约留着，文件里的 slot 也留着——它仍是事实）
-                ev = request(Path(args.home), {"cmd": "release", "leased_by": ident.leased_by}, lang)  # 不带 pane：关模式不刷新注入窗格
+            if daemon_up:
+                ev = request(home, {"cmd": "release", "leased_by": ident.leased_by}, lang)  # 不带 pane：关模式不刷新注入窗格
                 if ev is not None and ev.get("event") == "released":
                     released, lease_gone = str(ev["slot"]), True
                 elif ev is not None and ev.get("kind") == "no_lease":
@@ -743,7 +748,47 @@ def away_on(home: Path, root: Path, lang: str) -> int:
             return EXIT_NEEDS_HUMAN  # 租约留着（人在键盘旁，跑完 confirm-sub 再 away on 就是它）；开关不写
     projstate.save(root, away=True, slot=slot, confirmed=subscribed, target=ident.leased_by)
     print(texts.t("cli.away.path", lang, path=projstate.state_path(root)))
+    if subscribed:
+        # 走 _confirm_or_point 那一支时还没「开成了」（手机没订阅上，通知也送不到）：不发
+        _send_away_notice(home, ident, lang, title=texts.t("away.on.title", lang), body=_away_on_body(home, lang))
+    _warn_if_daemon_has_no_herdr(home, lang)
     return 0
+
+
+def _away_on_body(home: Path, lang: str) -> str:
+    """开启通知的正文三选一：不在 herdr 里就说明只有对提问的回复能回到 agent；
+    在 herdr 里但 daemon 自己视角找不到 herdr（多半装机顺序反了）就建议重启；两者都过才说消息能直接送进终端。
+
+    probe(home) 探不到状态（daemon 瞬时没应答）时也按「找不到 herdr」处理，这里刻意不学 _warn_if_daemon_has_no_herdr
+    那样遇到探不到就干脆不说话——那条只是一句可有可无的诊断，静默无妨；这条正文没有第三种「不确定」的说法可选，
+    错判成「找得到」会让手机消息在用户不知情的情况下送不到，两害相权，宁可多提醒一次重启。"""
+    if os.environ.get("HERDR_ENV") != "1":
+        return texts.t("away.on.body.no_herdr", lang)
+    status = probe(home)
+    if status is not None and status.get("herdr", {}).get("bin") is not None:
+        return texts.t("away.on.body.full", lang)
+    return texts.t("away.on.body.daemon_no_herdr", lang)
+
+
+def _send_away_notice(home: Path, ident: Identity, lang: str, *, title: str, body: str) -> None:
+    """开 / 关远程模式时尽力推一条通知给手机；两处调用都只在槽位已经过闸之后才会走到这里，直接按已过闸请求。
+    发不出去不改变调用方的结果：吞掉失败，只在 stderr 留一行诊断。"""
+    ev = request(home, {"cmd": "notify", "payload": {"title": title, "body": body}, "leased_by": ident.leased_by,
+                        "pane": ident.pane, "tag": ident.tag, "require_confirmed": True}, lang, not_sent=True)
+    if ev is None or ev.get("event") != "sent":
+        why = ev.get("message") if ev else texts.t("cli.no_response", lang)
+        err(texts.t("cli.away.not_notified", lang, why=why))
+
+
+def _warn_if_daemon_has_no_herdr(home: Path, lang: str) -> None:
+    """远程模式刚开起来：这台 agent 在 herdr 里，却是 daemon 自己 PATH 上找不到 herdr（多半装机顺序反了）——
+    手机消息这就送不到，让 agent 知道该重启 daemon。只在这一种组合下才值得说：不在 herdr 里没处重启，
+    也没有窗格可指给它看。退出码不受影响：远程模式已经开成了，这只是一句诊断。"""
+    if os.environ.get("HERDR_ENV") != "1":
+        return
+    status = probe(home)
+    if status is not None and status.get("herdr", {}).get("bin") is None:
+        err(texts.t("cli.away.daemon_no_herdr", lang))
 
 
 # ---------------------------------------------------------------- daemon 的起停
@@ -774,6 +819,17 @@ def _stale_pid(home: Path) -> int | None:
         return None
 
 
+def _herdr_status_line(view: dict, lang: str) -> str:
+    """`daemon --status` 多打的那一行：daemon 自己视角的 herdr（它自己启动那一刻的 PATH 快照，不是本机现在的）。"""
+    if view.get("bin") is None:
+        return texts.t("cli.status.herdr.missing", lang)
+    if view.get("reachable"):
+        return texts.t("cli.status.herdr.ok", lang, bin=view["bin"])
+    # herdr_view() 的自己进程内调用永远给 error 一个非空值；这条 view 是跨 IPC 收到的一份 JSON，
+    # 保留 "?" 兜底防的是版本不一致的 daemon（它自己的 herdr_view 实现变了）越过这份契约传回空值
+    return texts.t("cli.status.herdr.unreachable", lang, bin=view["bin"], error=view.get("error") or "?")
+
+
 def daemon_status(home: Path, lang: str) -> int:
     ev = probe(home)
     if ev is None:
@@ -788,6 +844,9 @@ def daemon_status(home: Path, lang: str) -> int:
         sub = texts.t("cli.status.sub.disconnected", lang, seconds=ev["disconnected_for"])
     line = texts.t("cli.status.line", lang, pid=ev["pid"], sub=sub, pending=ev["pending"], confirming=ev.get("confirming", 0), pool=ev["pool"])
     print(line + (texts.t("cli.status.transport", lang, transport=ev["transport"]) if ev.get("transport") else ""))
+    herdr_ev = ev.get("herdr")  # 旧形态 / 被换掉的 probe 返回值可能没有这个键：没有就不打这一行，不崩
+    if herdr_ev:
+        print(_herdr_status_line(herdr_ev, lang))
     return 0
 
 
@@ -819,10 +878,33 @@ def probe(home: Path, *, timeout: float | None = None) -> dict | None:
     return ipc.probe(home, timeout=PROBE_TIMEOUT if timeout is None else timeout)
 
 
+def _daemon_env(env: Mapping[str, str] | None = None) -> dict[str, str] | None:
+    """给 _spawn_daemon 用的一份补过 PATH 的 env；None 表示不覆盖，沿用今天的继承行为。
+
+    只在这一种情形下补：起点这一刻在 herdr 里，且 herdr 自己把 HERDR_BIN_PATH（它自身可执行文件的完整路径）
+    带进了这个 pane 的 shell，而它所在的目录还不在当前 PATH 里——这正是「daemon 比 herdr 先启动」那种装机
+    顺序留下的洞：等 herdr 装好、从有它的这个 pane 里重新起 daemon 时，让新起的这个补上目录，往后就找得到了。
+    """
+    e = os.environ if env is None else env
+    if e.get("HERDR_ENV") != "1":
+        return None
+    bin_path = e.get("HERDR_BIN_PATH")
+    if not bin_path:
+        return None
+    directory = os.path.dirname(bin_path)
+    if not directory:
+        return None
+    path = e.get("PATH", "")
+    if directory in path.split(os.pathsep):
+        return None
+    return {**e, "PATH": f"{directory}{os.pathsep}{path}" if path else directory}
+
+
 def _spawn_daemon(home: Path, lang: str) -> subprocess.Popen:
     """脱离会话 / 控制台起 daemon（怎么脱离由平台层定），stdio 全接空设备。语言用 --lang 显式带过去（调用方已解析过，
     子进程不必再看环境 / locale）。--lang 与 --home 都是顶层选项，必须放在子命令前面。"""
-    return platform_.spawn_detached([sys.executable, os.path.abspath(__file__), "--lang", lang, "--home", str(home), "daemon"])
+    return platform_.spawn_detached([sys.executable, os.path.abspath(__file__), "--lang", lang, "--home", str(home), "daemon"],
+                                     env=_daemon_env())
 
 
 def daemon_detach(home: Path, lang: str) -> int:
