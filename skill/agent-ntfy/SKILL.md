@@ -233,8 +233,16 @@ to the user**; the outcomes are:
 
 Once a confirmed slot actually backs it, `away on` also pushes a notification to the phone on its own — you
 do not need to send one yourself with `notify`. `away off` sends one too, before it releases the lease,
-telling the human to continue from the terminal; a send failure never changes the exit code or the state
-file, it only adds a `note: the phone was not notified (…)` line to stderr for you to see.
+telling the human to continue from the terminal. While remote mode is on, `release`ing this project's slot
+(no argument, or naming the slot this project holds) pushes a farewell first as well, telling the human this
+topic is about to go back to the pool. None of these three change the exit code, the release, or the state
+file when the send fails — each adds a `note: the phone was not notified (…)` line to stderr, or, if the
+daemon predates this feature and does not recognize the request, a line telling you to restart it.
+
+And if remote mode is on but this project currently holds no slot, the next `ask` / `notify` that leases a
+fresh confirmed slot pushes the same opening notice `away on` would, before that message goes out — even
+though nobody ran `away on` by hand. Unlike the three above, a failure to send that one is not surfaced on
+stderr — it only goes into the daemon's own log — and it never affects the `ask` / `notify` call itself.
 
 The switch and the current slot live in `<project root>/.ntfy-connector/state.json` (project root = the git
 toplevel, else the cwd), written by `away on|off` and refreshed by `ask` / `notify` / `confirm-sub` /
@@ -265,7 +273,8 @@ or the user's next phone message lands in the wrong pane.
 - The pane the last command ran from is remembered as the injection target; `ask`, `notify`, `slots`,
   `release` (no argument) and `away on|status` refresh it.
 - When your task ends, run `release` (no argument releases this project's slot). `slots` shows the pool.
-- `release` also clears `slot` in the state file; `away off` is the human's call, not yours.
+- `release` also clears `slot` in the state file; `away off` is the human's call, not yours. While remote
+  mode is on, `release` pushes a farewell to the phone before it lets the slot go (see above).
 - After an upgrade: restart the daemon, and free leases left by an older version with `release <slot>` run
   from the project that held them
   ([references/daemon.md](references/daemon.md) §4).

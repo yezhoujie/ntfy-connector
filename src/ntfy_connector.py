@@ -394,18 +394,18 @@ def cmd_slots(args) -> int:
 
 def cmd_release(args) -> int:
     lang = args.lang
+    root = project_root_or_none(lang)
+    if root is None:
+        return EXIT_CHANNEL
+    ident = identity(root)
     if args.slot:
         # 指名释放：带上本项目身份让 daemon 核归属——别的项目的租约不能释放，要由用户去那个项目关远程模式
-        root = project_root_or_none(lang)
-        if root is None:
-            return EXIT_CHANNEL
-        req = {"cmd": "release", "slot": args.slot, "leased_by": identity(root).leased_by}
+        req = {"cmd": "release", "slot": args.slot, "leased_by": ident.leased_by}
     else:
-        root = project_root_or_none(lang)  # 不给槽位 = 释放本项目租的那个
-        if root is None:
-            return EXIT_CHANNEL
-        ident = identity(root)
-        req = {"cmd": "release", "leased_by": ident.leased_by, "pane": ident.pane}
+        req = {"cmd": "release", "leased_by": ident.leased_by, "pane": ident.pane}  # 不给槽位 = 释放本项目租的那个
+    if require_confirmed(root):
+        # 远程模式开着才带告别；指名别的项目的槽位本就会被 not_yours 拒掉，这里不必先判归属
+        req["announce"], req["tag"] = "release", ident.tag
     ev = request(Path(args.home), req, lang)
     if ev is None:
         return EXIT_CHANNEL
@@ -413,8 +413,26 @@ def cmd_release(args) -> int:
         err(str(ev.get("message")))
         return EXIT_BY_KIND.get(str(ev.get("kind")), EXIT_CHANNEL)
     print(texts.t("cli.released", lang, slot=ev["slot"]))
+    if "announce" in req:
+        _warn_if_daemon_ignored_announce(ev, lang)  # released 时才判定：见函数注释
+        _warn_if_announce_failed(ev, lang)
     projstate.note_released(ev["slot"], explicit=bool(args.slot))
     return 0
+
+
+def _warn_if_announce_failed(ev: dict, lang: str) -> None:
+    """announced 为 false 时打一行诊断（沿用既有的 not_notified 措辞）。这个键只要出现就可信——daemon 认得
+    announce 字段、确实按它的规则求过值，不论这次 release 本身成没成功，调用方任何响应形态下都可以直接调用。"""
+    if ev.get("announced") is False:
+        err(texts.t("cli.away.not_notified", lang, why=ev.get("announce_why") or texts.t("cli.no_response", lang)))
+
+
+def _warn_if_daemon_ignored_announce(ev: dict, lang: str) -> None:
+    """release 成功（event 为 released）、这次请求带了 announce，响应却没有 announced 键：只有太旧、不认得这个
+    字段的 daemon 才会这样。别的拒绝分支（no_lease / not_yours / bad_request……）本就可能在 daemon 侧走到
+    announce 逻辑之前就返回，那些分支没有 announced 键是正常的，不能当成版本过旧的信号——只在 released 时判定。"""
+    if ev.get("event") == "released" and "announced" not in ev:
+        err(texts.t("cli.away.announce_unsupported", lang))
 
 
 def offer_close_pane(lang: str) -> None:
@@ -611,12 +629,19 @@ def cmd_away(args) -> int:
             home = Path(args.home)
             ident = identity(root)
             daemon_up = probe(home) is not None  # daemon 在跑才去释放；没跑就只关开关（租约留着，文件里的 slot 也留着——它仍是事实）
-            if daemon_up and projstate.load(root).get("away") is True:
-                # 先通知手机、再释放：槽位一释放就可能立刻被别的项目拿走，通知会发不出去或发错地方
-                _send_away_notice(home, ident, lang, title=texts.t("away.off.title", lang), body=texts.t("away.off.body", lang))
             released, lease_gone = None, False
             if daemon_up:
-                ev = request(home, {"cmd": "release", "leased_by": ident.leased_by}, lang)  # 不带 pane：关模式不刷新注入窗格
+                req = {"cmd": "release", "leased_by": ident.leased_by}  # 不带 pane：关模式不刷新注入窗格
+                announcing = projstate.load(root).get("away") is True
+                if announcing:
+                    # 告别与释放合并成一次请求（daemon 先告别再放，release 被 active / confirming 拒绝时也不撤回：
+                    # 这里不管释放成没成都会把开关关掉，告别不能跟着一起黄）：不走单独的 notify 请求——本项目
+                    # 没有租约时 notify 会经 _resolve_lease 顺手新租一个 topic，再触发新租开启通知，自相矛盾
+                    req["announce"], req["tag"] = "away_off", ident.tag
+                ev = request(home, req, lang)
+                if ev is not None and announcing:
+                    _warn_if_daemon_ignored_announce(ev, lang)
+                    _warn_if_announce_failed(ev, lang)  # released 与被拒（active / confirming）都可能真的告别过
                 if ev is not None and ev.get("event") == "released":
                     released, lease_gone = str(ev["slot"]), True
                 elif ev is not None and ev.get("kind") == "no_lease":

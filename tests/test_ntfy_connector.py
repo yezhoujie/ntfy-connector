@@ -474,6 +474,95 @@ class OtherCommandsTest(unittest.TestCase):
         self.assertFalse(out.splitlines()[1].rstrip().endswith("wD:p2"))
 
 
+class ReleaseAnnounceCLITest(unittest.TestCase):
+    """release 请求带不带 announce：只看本项目 state.json 里的 away 字段，不看调用方式（无参 / 指名自己的槽位）。"""
+
+    def spy(self):
+        calls: list[dict] = []
+        orig = ntfy_connector.request
+
+        def wrapper(home, req, lang, **kw):
+            calls.append(dict(req))
+            return orig(home, req, lang, **kw)
+        return calls, wrapper
+
+    def test_away_on_attaches_announce(self):
+        h = Harness(self)
+        root = temp_root(self)
+        h.state.acquire(owner(root), pane="wD:p1")
+        projstate.save(root, away=True, slot="slot1", confirmed=True, target=owner(root))
+        calls, wrapper = self.spy()
+        with mock.patch.object(ntfy_connector, "request", side_effect=wrapper):
+            code, out, err = run(["--home", str(h.home), "release"], env=HERDR, root=root)
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(calls[-1].get("announce"), "release")
+        self.assertEqual(calls[-1].get("tag"), root.name)
+
+    def test_named_own_slot_also_attaches_announce(self):
+        h = Harness(self)
+        root = temp_root(self)
+        h.state.acquire(owner(root), pane="wD:p1")
+        projstate.save(root, away=True, slot="slot1", confirmed=True, target=owner(root))
+        calls, wrapper = self.spy()
+        with mock.patch.object(ntfy_connector, "request", side_effect=wrapper):
+            code, out, err = run(["--home", str(h.home), "release", "slot1"], env=HERDR, root=root)
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(calls[-1].get("announce"), "release")
+
+    def test_away_off_or_never_enabled_does_not_attach_announce(self):
+        h = Harness(self)
+        root = temp_root(self)
+        h.state.acquire(owner(root), pane="wD:p1")
+        calls, wrapper = self.spy()
+        with mock.patch.object(ntfy_connector, "request", side_effect=wrapper):
+            code, out, err = run(["--home", str(h.home), "release"], env=HERDR, root=root)  # 没启用过远程模式：没有 .ntfy-connector/
+        self.assertEqual((code, err), (0, ""))
+        self.assertNotIn("announce", calls[-1])
+
+        h2 = Harness(self)
+        root2 = temp_root(self)
+        h2.state.acquire(owner(root2), pane="wD:p1")
+        projstate.save(root2, away=False, slot="slot1", confirmed=True, target=owner(root2))
+        calls2, wrapper2 = self.spy()
+        with mock.patch.object(ntfy_connector, "request", side_effect=wrapper2):
+            code, out, err = run(["--home", str(h2.home), "release"], env=HERDR, root=root2)
+        self.assertEqual((code, err), (0, ""))
+        self.assertNotIn("announce", calls2[-1])
+
+    def test_announce_failure_does_not_change_the_result_but_warns_on_stderr(self):
+        h = Harness(self)
+        root = temp_root(self)
+        h.state.acquire(owner(root), pane="wD:p1")
+        projstate.save(root, away=True, slot="slot1", confirmed=True, target=owner(root))
+        h.client.fail_publish = "HTTP 429"
+        code, out, err = run(["--home", str(h.home), "release"], env=HERDR, root=root)
+        self.assertEqual((code, out), (0, Z("cli.released", slot="slot1") + "\n"))
+        self.assertIn("the phone was not notified", err)
+        self.assertIsNone(h.state.slots()["slot1"]["leased_by"])  # 仍然释放
+
+    # 新 CLI 配旧 daemon：release 成功但响应没有 announced 键，提示重启 daemon（而不是误报成发送失败）
+    def test_warns_when_daemon_is_too_old_to_announce(self):
+        h = Harness(self)
+        root = temp_root(self)
+        h.state.acquire(owner(root), pane="wD:p1")
+        projstate.save(root, away=True, slot="slot1", confirmed=True, target=owner(root))
+        orig = ntfy_connector.request
+
+        def old_daemon(home, req, lang, **kw):
+            ev = orig(home, req, lang, **kw)
+            if ev is not None and ev.get("event") == "released":
+                ev.pop("announced", None)
+                ev.pop("announce_why", None)
+            return ev
+
+        with mock.patch.object(ntfy_connector, "request", side_effect=old_daemon):
+            code, out, err = run(["--home", str(h.home), "release"], env=HERDR, root=root)
+        self.assertEqual((code, out), (0, Z("cli.released", slot="slot1") + "\n"))
+        self.assertIn(Z("cli.away.announce_unsupported"), err)
+        self.assertNotIn("the phone was not notified", err)
+        self.assertIsNone(h.state.slots()["slot1"]["leased_by"])
+
+
 class ConfirmSubTest(unittest.TestCase):
     """confirm-sub 的三种形态：默认（TTY，两段）· --subscribed（非 TTY 可用）· --show-topic（只看 topic）。"""
 
@@ -1499,27 +1588,38 @@ class AwayOnTest(unittest.TestCase):
         self.assertIsNone(h.state.slots()["slot1"]["leased_by"])
         self.assertEqual((self.state()["away"], self.state()["slot"], self.state()["confirmed"]), (False, None, None))
 
-    # 关闭前先给手机推一条通知，且顺序是硬要求：先发通知，再释放租约（释放后槽位可能立刻被别的项目拿走）
+    # 关闭前先给手机推一条告别，且顺序是硬要求：先发告别，再释放租约（释放后槽位可能立刻被别的项目拿走）。
+    # 告别与释放是同一次 release 请求（带 announce）
     def test_off_notifies_before_releasing_the_lease(self):
         h = Harness(self)
         self.away_on(h.home)
-        calls: list[str] = []
+        seen_holder_at_publish = []
+        orig_publish = h.client.publish
+
+        def spy_publish(topic, message, *, title=None, actions=None):
+            seen_holder_at_publish.append(h.state.slots()["slot1"]["leased_by"])  # 发布这一刻租约还在不在
+            return orig_publish(topic, message, title=title, actions=actions)
+
+        h.client.publish = spy_publish
+        calls: list[dict] = []
         orig = ntfy_connector.request
 
         def spy(home, req, lang, **kw):
-            calls.append(str(req.get("cmd")))
+            calls.append(dict(req))
             return orig(home, req, lang, **kw)
 
         with mock.patch.object(ntfy_connector, "request", side_effect=spy):
             code, out, err = run(["--home", str(h.home), "away", "off"], root=self.root, env=HERDR)
         self.assertEqual((code, err), (0, ""))
-        self.assertEqual(calls, ["notify", "release"])
+        self.assertEqual([c.get("cmd") for c in calls], ["release"])  # 一次请求
+        self.assertEqual(calls[0].get("announce"), "away_off")
+        self.assertEqual(seen_holder_at_publish, [owner(self.root)])  # 发布时租约还在，之后才释放
         pub = h.client.published[-1]
         self.assertEqual(pub["title"], f"[{self.root.name}] " + Z("away.off.title"))
         self.assertIn(Z("away.off.body"), pub["message"])
         self.assertIsNone(h.state.slots()["slot1"]["leased_by"])
 
-    # daemon 没跑：off 本身仍要能关，但没什么可通知的（连不上）
+    # daemon 没跑：off 本身仍要能关，但没什么可通知的（连不上，release 请求根本发不出去）
     def test_off_does_not_notify_when_daemon_is_not_running(self):
         projstate.save(self.root, away=True, slot="slot1", confirmed=True, target=owner(self.root))
         calls: list[str] = []
@@ -1532,24 +1632,35 @@ class AwayOnTest(unittest.TestCase):
         with mock.patch.object(ntfy_connector, "request", side_effect=spy):
             code, out, err = run(["--home", "/nonexistent/ntfy-connector-home", "away", "off"], root=self.root, env=HERDR)
         self.assertEqual((code, err), (0, ""))
-        self.assertNotIn("notify", calls)
+        self.assertEqual(calls, [])
 
-    # 本项目没开过（away 从没为真）：daemon 在跑也不发
+    # 本项目没开过（away 从没为真）：release 请求照发（顺带清理 daemon 侧可能残留的租约），但不带 announce，不推告别
     def test_off_does_not_notify_when_away_was_never_true(self):
         h = Harness(self)
         projstate.save(self.root, away=False, target=owner(self.root))
-        calls: list[str] = []
+        calls: list[dict] = []
         orig = ntfy_connector.request
 
         def spy(home, req, lang, **kw):
-            calls.append(str(req.get("cmd")))
+            calls.append(dict(req))
             return orig(home, req, lang, **kw)
 
         with mock.patch.object(ntfy_connector, "request", side_effect=spy):
             code, out, err = run(["--home", str(h.home), "away", "off"], root=self.root, env=HERDR)
         self.assertEqual((code, err), (0, ""))
-        self.assertNotIn("notify", calls)
+        self.assertEqual([c.get("cmd") for c in calls], ["release"])
+        self.assertNotIn("announce", calls[0])
         self.assertEqual(h.client.published, [])
+
+    # state.json 说着 away=True，但 daemon 侧本项目当下没有真实租约（比如租约已被单独 release 过）：
+    # release 请求直接 no_lease，不会经 _resolve_lease 的常规租约解析顺手新租一个 topic 再触发开启通知
+    def test_off_does_not_lease_a_new_topic_when_the_project_has_no_lease(self):
+        h = Harness(self)
+        projstate.save(self.root, away=True, slot="slot1", confirmed=True, target=owner(self.root))
+        code, out, err = run(["--home", str(h.home), "away", "off"], root=self.root, env=HERDR)
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(h.client.published, [])  # 没有告别，也没有开启通知
+        self.assertEqual([r["leased_by"] for r in h.state.slots().values()], [None] * 5)  # 没有租约被新建
 
     # 再次 away on：沿用已有租约，不租第二个
     def test_second_on_reuses_the_existing_lease(self):
@@ -1579,6 +1690,7 @@ class AwayOnTest(unittest.TestCase):
         self.assertEqual((self.state()["away"], self.state()["slot"], self.state()["confirmed"]), (False, "slot1", True))
 
     # 释放被拒（提问挂着）：开关照关、租约留着，文件里的 slot 也不能清——文件与 daemon 的租约必须说同一件事
+    # 提问挂着时 release 会被拒，但告别先于这道拒绝检查发出、开关照关
     def test_off_keeps_slot_in_file_when_release_is_refused(self):
         h = Harness(self)
         self.away_on(h.home)
@@ -1590,7 +1702,41 @@ class AwayOnTest(unittest.TestCase):
         self.assertEqual(h.state.slots()["slot1"]["leased_by"], owner(self.root))
         self.assertEqual(h.state.slots()["slot1"]["pane"], "wD:p1")  # 关模式不刷新注入窗格
         self.assertEqual((self.state()["away"], self.state()["slot"], self.state()["confirmed"]), (False, "slot1", True))
+        pub = h.client.published[-1]
+        self.assertEqual(pub["title"], f"[{self.root.name}] " + Z("away.off.title"))
+        self.assertIn(Z("away.off.body"), pub["message"])
         sock.close()
+
+    # 本项目自己的槽位未过闸：release 正常成功（没有 active / confirming 拦它），但没有订阅收得到告别，
+    # stderr 提一行说明
+    def test_off_warns_when_own_slot_is_unconfirmed(self):
+        h = Harness(self, subscribed=())
+        h.state.acquire(owner(self.root), pane="wD:p1")
+        projstate.save(self.root, away=True, slot="slot1", confirmed=False, target=owner(self.root))
+        code, out, err = run(["--home", str(h.home), "away", "off"], root=self.root, env=HERDR)
+        self.assertEqual(code, 0)
+        self.assertIn(Z("cli.away.off.released", slot="slot1"), out)
+        self.assertIn("the phone was not notified", err)
+        self.assertIsNone(h.state.slots()["slot1"]["leased_by"])
+
+    # 新 CLI 配旧 daemon：release 成功但响应没有 announced 键，提示重启 daemon（而不是误报成发送失败）
+    def test_off_warns_when_daemon_is_too_old_to_announce(self):
+        h = Harness(self)
+        self.away_on(h.home)
+        orig = ntfy_connector.request
+
+        def old_daemon(home, req, lang, **kw):
+            ev = orig(home, req, lang, **kw)
+            if ev is not None and ev.get("event") == "released":
+                ev.pop("announced", None)
+                ev.pop("announce_why", None)
+            return ev
+
+        with mock.patch.object(ntfy_connector, "request", side_effect=old_daemon):
+            code, out, err = run(["--home", str(h.home), "away", "off"], root=self.root, env=HERDR)
+        self.assertEqual(code, 0)
+        self.assertIn(Z("cli.away.announce_unsupported"), err)
+        self.assertNotIn("the phone was not notified", err)  # 不是发送失败，别混成那句
 
 
 if __name__ == "__main__":

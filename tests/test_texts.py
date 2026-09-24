@@ -48,6 +48,16 @@ class TableTest(unittest.TestCase):
             self.assertIn("away on", rendered)
             self.assertNotIn("ntfy-connector away on", rendered)
 
+    def test_old_daemon_hint_tells_the_actual_restart_steps(self):
+        # 只有 away on 会自动拉起 daemon；ask / release 等命令连不上就只报错退出，不会自己重试。
+        # 这条提示必须给出真的能让下一条命令连得上的两步（stop 再 detach），不能说「下一条命令自动拉起」
+        for lang in texts.LANGS:
+            rendered = texts.t("cli.away.announce_unsupported", lang)
+            self.assertIn("daemon --stop", rendered)
+            self.assertIn("daemon --detach", rendered)
+            self.assertNotIn("下一条命令会自动重新拉起", rendered)
+            self.assertNotIn("the next command starts a fresh one", rendered)
+
     def test_self_reference_and_validation_titles_stay_literal(self):
         # 自称与校验报错标题是「这条命令叫什么」，不是「去跑它」，不参与替换
         self.assertIn("ntfy-connector：", texts.t("cli.confirm.done_prompt", "zh", slot="s1"))

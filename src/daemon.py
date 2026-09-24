@@ -13,6 +13,12 @@ daemon.pid（只供人看：探活 / 停机都走 socket）· daemon.log（0600�
 socket 协议是 JSON Lines：客户端连上后发一行 {"cmd": ...}，daemon 回若干行事件（每行一个 JSON 对象）。
 带 leased_by 的请求（ask / notify / slots / release）可选带 pane：带了这个键就把本项目租约的注入窗格刷新成它（null = 不在 herdr 里，清空）；
 ask / notify 另可带 require_confirmed（用户离席：只用已过闸的槽位）。不带这些字段的旧客户端行为不变（窗格不动）。
+release 另可带 announce（只能是 "release" 或 "away_off"，别的取值 / 类型是 bad_request）+ tag：归属确认过、
+槽位确实过闸时尽力推一条告别（不带 notify 默认追加的「想回话」提示），响应带 announced（发没发出）与失败时的
+announce_why——announce 合法时这个键必现，让调用方能分辨「daemon 不认识这字段」与「认识但没发出去」。
+announce="away_off" 会赶在 active / confirming 拒绝检查之前告别，被拒也不撤回（调用方不管释放成没成都会把
+开关关掉）；announce="release" 仍是确定会释放之后才发。require_confirmed 为真时新租到的槽位同理会在
+本条 ask / notify 的消息之前先推一条与 away on 相同的开启通知（保留提示）——这几处都是尽力而为，失败只记日志。
 notify（单向通知：无按钮、不等回复）与 ask 共用租约解析，但不占「提问中」——提问挂着时照样放行，回 sent 后即关连接。
 ask 的连接保持到终态（reply / timeout / error）：daemon 若死了，连接当场断开，ask 立刻失败——这就是它的响亮信号；
 confirm-sub 同样保持到终态，且中途客户端会再发一行 {"ready": true}（用户订阅好了，可以发测试通知了）；
@@ -32,6 +38,7 @@ confirm-sub 同样保持到终态，且中途客户端会再发一行 {"ready": 
 
 import json
 import logging
+import math
 import os
 import queue
 import selectors
@@ -63,6 +70,8 @@ WARN_AFTER_SECONDS = 60.0  # 断开这么久 ⇒ 向每个 pending 的 ask 发 w
 CONFIRM_TIMEOUT = 600.0  # 可达性确认：订阅 + 找通知栏 + 点按钮，够用。CLI 侧同名默认值要同步（它刻意不 import 本模块）
 # slots 视图里的 state 由 CLI 按语言显示；daemon 只给稳定的 state_key（unassigned / idle / active / confirming），叠在状态层三态之上
 STATE_KEYS = {SlotState.UNASSIGNED.value: "unassigned", SlotState.IDLE.value: "idle", SlotState.ACTIVE.value: "active"}
+# release 请求里 announce 的取值 → 告别文案（标题 key, 正文 key）：release 是槽位被还回池子，away_off 是关远程模式顺带释放
+RELEASE_ANNOUNCE_TEXTS = {"release": ("away.release.title", "away.release.body"), "away_off": ("away.off.title", "away.off.body")}
 MAX_REQUEST_BYTES = 1024 * 1024  # 一行请求的上限：本地 0600 socket 威胁不大，但不能让一个不发换行的客户端把内存吃光
 SEND_TIMEOUT = 5.0  # 往客户端写事件的阻塞上限
 STOP_INJECT_GRACE = 2.0  # 关停时给在途的 herdr 调用这么久收尾（正常几十毫秒就回）；过了就按「无法确认」发回执
@@ -93,6 +102,12 @@ def _tag_for(tag: object, slot: str) -> str:
     if not isinstance(tag, str) or not tag:
         tag = slot
     return tag.encode("utf-8")[:render.TAG_MAX_BYTES].decode("utf-8", errors="ignore")
+
+
+def _is_valid_timeout(value: object) -> bool:
+    """ask / confirm-sub 的 timeout 字段合法：真正的数字（bool 是 int 子类，单独排除，否则 True 会被当成 1）、
+    有限、且为正——NaN 用 <= 0 判不出来（比较恒假），会被放行成一个永远不超时的等待；inf 同样让它永远不超时。"""
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value > 0
 
 
 def paths(home: Path) -> dict[str, Path]:
@@ -676,6 +691,9 @@ class Daemon:
         slot = req.get("slot")
         leased_by = req.get("leased_by")
         lang = self._req_lang(req)
+        variant = req.get("announce")
+        if variant is not None and (not isinstance(variant, str) or variant not in RELEASE_ANNOUNCE_TEXTS):
+            return {"event": "error", "kind": "bad_request", "sent": False, "message": texts.t("daemon.bad_request.announce_args", lang)}
         try:
             known = self._state().slots()
         except StateError as e:
@@ -686,23 +704,71 @@ class Daemon:
                 return {"event": "error", "kind": "no_lease", "sent": False, "message": texts.t("daemon.no_lease", lang)}
         if not slot and not leased_by:
             return {"event": "error", "kind": "bad_request", "sent": False, "message": texts.t("daemon.bad_request.release_args", lang)}
+        if not isinstance(slot, str):
+            # 指名的槽位不是字符串（协议层的畸形请求）：不能拿它当 dict key 去查 known，也没有什么可释放的
+            return {"event": "error", "kind": "bad_request", "sent": False, "message": texts.t("daemon.bad_request.release_args", lang)}
         if slot not in known:
             return self._unknown_slot(slot, lang)
-        assert isinstance(slot, str)
         holder = known[slot]["leased_by"]
-        if req.get("slot") and leased_by and holder and holder != leased_by:
+        if not holder:
+            # 指名释放一个当下没有任何项目持有的槽位：没什么可释放的，也不能把告别推到这个跟本次请求无关的 topic 上
+            return {"event": "error", "kind": "no_lease", "sent": False, "message": texts.t("state.release.unassigned", lang, slot=slot)}
+        if req.get("slot") and leased_by and holder != leased_by:
             # 指名释放别的项目的租约：一个会话不能替另一个会话退出远程模式；要释放得由用户去那个项目关模式
             return {"event": "error", "kind": "not_yours", "sent": False, "message": texts.t("daemon.release.not_yours", lang, slot=slot, holder=holder)}
+        # away_off：调用方不管这次 release 被不被拒都会把远程模式的开关关掉，所以告别要赶在 active / confirming
+        # 两项拒绝检查之前发出去，被拒也不撤回。release（不带这层含义）维持原样——被拒时什么都没变，不告别。
+        # 提前告别只在这个槽位确实是发起方自己的（leased_by 给了、且等于 holder）时才发——协议层请求可以只带
+        # slot、不带 leased_by 指名释放任意槽位（这不是本处新增的口子），但那种请求没有一个明确的"自己人"
+        # 身份，不能替它提前把告别推给槽位当下的持有者：万一随后被 active / confirming 拒绝，槽位根本没释放，
+        # 收到告别的就成了一个跟这次请求毫不相干的项目
+        announced: tuple[bool, str] | None = (
+            self._announce_release(req, known[slot], slot, lang)
+            if variant == "away_off" and leased_by and holder == leased_by else None
+        )
         if slot in self._pending:
-            return {"event": "error", "kind": "active", "sent": False, "message": texts.t("daemon.release.active", lang, slot=slot)}
+            return self._attach_announced({"event": "error", "kind": "active", "sent": False, "message": texts.t("daemon.release.active", lang, slot=slot)}, announced)
         if slot in self._confirming:
-            return {"event": "error", "kind": "active", "sent": False, "message": texts.t("daemon.release.confirming", lang, slot=slot)}
+            return self._attach_announced({"event": "error", "kind": "active", "sent": False, "message": texts.t("daemon.release.confirming", lang, slot=slot)}, announced)
+        if variant is not None and announced is None:
+            # release 变体到这里才发（确定会释放之后）；away_off 变体没能在上面提前发（多半是身份不匹配）
+            # 又走到了这里，说明它反而会真的被释放——告别与释放照样对得上
+            announced = self._announce_release(req, known[slot], slot, lang)
         try:
             self._state().release(slot, self._active())
         except StateError as e:
-            return {"event": "error", "kind": "state", "sent": False, "message": e.text(lang)}
+            return self._attach_announced({"event": "error", "kind": "state", "sent": False, "message": e.text(lang)}, announced)
         LOG.info("释放 slot=%s", slot)
-        return {"event": "released", "slot": slot}
+        return self._attach_announced({"event": "released", "slot": slot}, announced)
+
+    @staticmethod
+    def _attach_announced(ev: dict, announced: tuple[bool, str] | None) -> dict:
+        """把 _announce_release 的结果叠进一份已经写好的响应；没请求过告别（announced 为 None）就什么都不加。"""
+        if announced is not None:
+            ok, why = announced
+            ev["announced"] = ok
+            if not ok:
+                ev["announce_why"] = why
+        return ev
+
+    def _announce_release(self, req: dict, rec: dict, slot: str, lang: str) -> tuple[bool, str]:
+        """release 前尽力推一条告别；调用方已确认过 announce 是合法取值、且这个槽位确实是这次请求要动的那个。
+        未过闸的槽位没有订阅能收到，不真的发布，但仍报 (False, 原因)——只要 announce 合法，响应就要稳定带
+        announced 键，让 CLI 能分辨「daemon 不认识这个字段」与「认识但这次没发出去」。告别不带 render_notify
+        默认追加的「想回话」提示：正文已经说了这个 topic 不再送达，两句拼在一起会自相矛盾。"""
+        variant = req.get("announce")
+        assert isinstance(variant, str) and variant in RELEASE_ANNOUNCE_TEXTS  # 调用方已经校验过
+        title_key, body_key = RELEASE_ANNOUNCE_TEXTS[variant]
+        if not rec.get("subscribed"):
+            return False, texts.t("daemon.announce.unconfirmed", lang)
+        tag = _tag_for(req.get("tag"), slot)
+        rendered = render.render_notify({"title": texts.t(title_key, lang), "body": texts.t(body_key, lang)}, tag=tag, lang=lang, hint=False)
+        try:
+            self._publish_own(self._state().topic_of(slot), rendered.message, title=rendered.title, actions=rendered.actions)
+        except (NtfyError, StateError) as e:
+            LOG.warning("告别通知发布失败 slot=%s：%s", slot, type(e).__name__)
+            return False, texts.t("daemon.publish_failed", lang, error=e)
+        return True, ""
 
     def _no_free_slot(self, slots: dict, lang: str, *, require_confirmed: bool) -> dict:
         """全部已租用时的错误事件（ask / notify / lease 同款）：列出每个槽位的占用情况，让用户决定——
@@ -746,7 +812,7 @@ class Daemon:
         timeout = req.get("timeout", DEFAULT_TIMEOUT)
         # CLI 已按 JSON lang → 环境 → en 解析好随请求带来；没带（别的客户端直接说 socket 协议）就自己按同一优先级看 JSON，再退到 daemon 的
         lang = str(req["lang"]) if texts.is_lang(req.get("lang")) else validate.lang_of(payload, self.lang)
-        if not isinstance(leased_by, str) or not leased_by or not isinstance(timeout, (int, float)) or timeout <= 0:
+        if not isinstance(leased_by, str) or not leased_by or not _is_valid_timeout(timeout):
             self._reply_once(c, {"event": "error", "kind": "bad_request", "sent": False, "message": texts.t("daemon.bad_request.ask_args", lang)})
             return
         problems = validate.check(payload, lang)  # ask 已在本地校验过；这里再核一次（长度）作防御，不重复报文案
@@ -815,7 +881,27 @@ class Daemon:
         if not lease.subscribed:
             self._reply_once(c, {"event": "error", "kind": "unconfirmed", "sent": False, "slot": lease.slot, "message": texts.t("daemon.unconfirmed", lang, slot=lease.slot)})
             return None
+        if not existing and require_confirmed:
+            # 新租到的槽位、且远程模式开着：本条 ask / notify 的消息发出之前，先推一条与 away on 相同的开启通知——
+            # 走到这里说明前面的退租分支都没触发，这次会真的把消息发到这个槽位
+            self._announce_new_lease(lease, req, lang)
         return lease
+
+    def _announce_new_lease(self, lease: Lease, req: dict, lang: str) -> None:
+        """开启通知的正文三选一，逻辑同 CLI 侧的 _away_on_body：请求没带 pane（不在 herdr 里）就说明只有回复能回到 agent；
+        daemon 自己视角找不到 herdr 就建议重启；两者都过才说消息能直接送进终端。发送失败不影响本条消息，只记日志。"""
+        if _pane_of(req) is None:
+            body_key = "away.on.body.no_herdr"
+        elif self._herdr_view().get("bin") is not None:
+            body_key = "away.on.body.full"
+        else:
+            body_key = "away.on.body.daemon_no_herdr"
+        tag = _tag_for(req.get("tag"), lease.slot)
+        rendered = render.render_notify({"title": texts.t("away.on.title", lang), "body": texts.t(body_key, lang)}, tag=tag, lang=lang)
+        try:
+            self._publish_own(lease.topic, rendered.message, title=rendered.title, actions=rendered.actions)
+        except NtfyError as e:
+            LOG.warning("新租开启通知发布失败 slot=%s：%s", lease.slot, type(e).__name__)
 
     # ---------------------------------------------------------------- notify
 
@@ -859,7 +945,7 @@ class Daemon:
         slot = req.get("slot")
         timeout = req.get("timeout", CONFIRM_TIMEOUT)
         lang = self._req_lang(req)
-        if not isinstance(timeout, (int, float)) or timeout <= 0:
+        if not _is_valid_timeout(timeout):
             self._reply_once(c, {"event": "error", "kind": "bad_request", "sent": False, "message": texts.t("daemon.bad_request.confirm_timeout", lang)})
             return
         try:

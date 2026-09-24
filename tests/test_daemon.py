@@ -205,12 +205,13 @@ class Harness:
         events = ntfy_connector.read_events(sock)
         return sock, next(events), events
 
-    def notify(self, *, leased_by="proj:/w/me", tag: str | None = "me", **extra):
-        """发 notify（一问一答）：返回全部事件。extra（payload / pane / require_confirmed …）原样进请求；payload 不给就用样本。"""
+    def notify(self, *, leased_by="proj:/w/me", tag: object = "me", **extra):
+        """发 notify（一问一答）：返回全部事件。extra（payload / pane / require_confirmed …）原样进请求；payload 不给就用样本。
+        tag 类型同 daemon 侧 _tag_for：协议层不限定，测试要能喂非字符串探类型校验。"""
         extra.setdefault("payload", NOTIFY)
         return self.request(cmd="notify", leased_by=leased_by, tag=tag, **extra)
 
-    def ask(self, *, leased_by="wD:p1", tag: str | None = "wD:p1", timeout: float = 30, payload=None, **extra):
+    def ask(self, *, leased_by="wD:p1", tag: object = "wD:p1", timeout: float = 30, payload=None, **extra):
         """发 ask 并读到 sent（或首个终态事件），把连接交回去继续读。extra（pane / require_confirmed …）原样进请求；不给就是旧客户端形态。"""
         sock = self.connect()
         ntfy_connector.send_request(sock, {"cmd": "ask", "payload": payload or SAMPLE, "leased_by": leased_by, "tag": tag, "timeout": timeout, **extra}, home=self.home)
@@ -501,6 +502,206 @@ class LeasePaneTest(unittest.TestCase):
         self.assertEqual(h.request(cmd="slots")[0]["slots"]["slot1"], {"state": "未分配", "state_key": "unassigned", "subscribed": True, "leased_by": None, "leased_at": None, "pane": None})
 
 
+class ReleaseAnnounceTest(unittest.TestCase):
+    """release 带 announce：只在通过全部拒绝检查、且槽位已过闸时才发告别，且先发后放。"""
+
+    ME = "proj:/w/me"
+
+    def test_announce_release_sends_farewell_before_releasing(self):
+        h = Harness(self)
+        h.state.acquire(self.ME, pane="wD:p1")
+        seen_holder_at_publish = []
+        orig_publish = h.client.publish
+
+        def spy(topic, message, *, title=None, actions=None):
+            seen_holder_at_publish.append(h.state.slots()["slot1"]["leased_by"])  # 发布这一刻租约还在不在
+            return orig_publish(topic, message, title=title, actions=actions)
+
+        h.client.publish = spy
+        ev = h.request(cmd="release", leased_by=self.ME, announce="release", tag="me")[0]
+        self.assertEqual(ev, {"event": "released", "slot": "slot1", "announced": True})
+        self.assertEqual(seen_holder_at_publish, [self.ME])  # 发布时租约还在，之后才释放
+        self.assertIsNone(h.state.slots()["slot1"]["leased_by"])
+        pub = h.client.published[-1]
+        self.assertEqual(pub["title"], "[me] " + Z("away.release.title"))
+        self.assertIn(Z("away.release.body"), pub["message"])
+        self.assertNotIn(Z("notify.hint"), pub["message"])  # 告别不带「想回话」提示：正文已经说了这里不再送达
+
+    def test_announce_away_off_uses_away_off_wording(self):
+        h = Harness(self)
+        h.state.acquire(self.ME, pane="wD:p1")
+        ev = h.request(cmd="release", leased_by=self.ME, announce="away_off", tag="me")[0]
+        self.assertEqual((ev["event"], ev["announced"]), ("released", True))
+        pub = h.client.published[-1]
+        self.assertEqual(pub["title"], "[me] " + Z("away.off.title"))
+        self.assertIn(Z("away.off.body"), pub["message"])
+        self.assertNotIn(Z("notify.hint"), pub["message"])
+
+    def test_unconfirmed_slot_reports_announced_false_with_a_reason(self):
+        h = Harness(self, subscribed=())
+        h.state.acquire(self.ME, pane="wD:p1")
+        ev = h.request(cmd="release", leased_by=self.ME, announce="release", tag="me")[0]
+        self.assertEqual((ev["event"], ev["announced"]), ("released", False))
+        self.assertIn("announce_why", ev)  # announce 合法就必须带 announced 键，哪怕没有发出去
+        self.assertEqual(h.client.published, [])
+
+    def test_without_announce_flag_nothing_is_sent(self):
+        h = Harness(self)
+        h.state.acquire(self.ME, pane="wD:p1")
+        ev = h.request(cmd="release", leased_by=self.ME)[0]
+        self.assertEqual(ev, {"event": "released", "slot": "slot1"})
+        self.assertEqual(h.client.published, [])
+
+    def test_publish_failure_still_releases_and_marks_announced_false(self):
+        h = Harness(self)
+        h.state.acquire(self.ME, pane="wD:p1")
+        h.client.fail_publish = "HTTP 429"
+        ev = h.request(cmd="release", leased_by=self.ME, announce="release", tag="me")[0]
+        self.assertEqual((ev["event"], ev["slot"], ev["announced"]), ("released", "slot1", False))
+        self.assertIn("announce_why", ev)
+        self.assertIsNone(h.state.slots()["slot1"]["leased_by"])
+
+    def test_rejected_release_does_not_announce(self):
+        h = Harness(self, pool_size=2, subscribed=("slot1",))
+        h.state.acquire("proj:/w/a")
+        ev = h.request(cmd="release", slot="slot1", leased_by="proj:/w/b", announce="release", tag="b")[0]
+        self.assertEqual((ev["event"], ev["kind"]), ("error", "not_yours"))
+        self.assertEqual(h.client.published, [])
+        sock, first, events = h.ask(leased_by="proj:/w/a", tag="a")  # 让 slot1 活跃（有提问挂着）
+        self.assertEqual(len(h.client.published), 1)  # 只有提问卡
+        ev2 = h.request(cmd="release", leased_by="proj:/w/a", announce="release", tag="a")[0]
+        self.assertEqual((ev2["event"], ev2["kind"]), ("error", "active"))
+        self.assertNotIn("announced", ev2)  # release 被拒时什么都没变，不告别
+        self.assertEqual(len(h.client.published), 1)  # 拒绝分支：没有告别
+        sock.close()
+
+    def test_release_variant_does_not_announce_when_rejected_by_confirming(self):
+        h = Harness(self)
+        h.state.acquire(self.ME, pane="wD:p1")
+        csock, cfirst, cevents = h.confirm("slot1", again=True)  # 换手机重新过闸：槽位「确认中」
+        ev = h.request(cmd="release", leased_by=self.ME, announce="release", tag="me")[0]
+        self.assertEqual((ev["event"], ev["kind"]), ("error", "active"))
+        self.assertNotIn("announced", ev)
+        self.assertEqual(h.client.published, [])
+        self.assertEqual(h.state.slots()["slot1"]["leased_by"], self.ME)
+        csock.close()
+
+    def test_named_unassigned_slot_is_rejected_before_any_announce(self):
+        # slot2 未分配但已过闸：不能把告别推到一个跟这次释放无关的 topic 上，也不该假装释放成功
+        h = Harness(self)
+        ev = h.request(cmd="release", slot="slot2", leased_by=self.ME, announce="release", tag="me")[0]
+        self.assertEqual(ev["event"], "error")
+        self.assertEqual(h.client.published, [])
+        self.assertIsNone(h.state.slots()["slot2"]["leased_by"])
+
+    def test_away_off_announces_even_when_release_is_rejected_by_active(self):
+        h = Harness(self)
+        h.state.acquire(self.ME, pane="wD:p1")
+        sock, first, events = h.ask(leased_by=self.ME, tag="me")  # slot1 现在挂着提问
+        ev = h.request(cmd="release", leased_by=self.ME, announce="away_off", tag="me")[0]
+        self.assertEqual((ev["event"], ev["kind"], ev["announced"]), ("error", "active", True))
+        self.assertEqual(h.state.slots()["slot1"]["leased_by"], self.ME)  # 没有真的释放
+        pub = h.client.published[-1]
+        self.assertEqual(pub["title"], "[me] " + Z("away.off.title"))
+        sock.close()
+
+    def test_away_off_announces_even_when_release_is_rejected_by_confirming(self):
+        h = Harness(self)
+        h.state.acquire(self.ME, pane="wD:p1")
+        csock, cfirst, cevents = h.confirm("slot1", again=True)
+        ev = h.request(cmd="release", leased_by=self.ME, announce="away_off", tag="me")[0]
+        self.assertEqual((ev["event"], ev["kind"], ev["announced"]), ("error", "active", True))
+        self.assertEqual(h.state.slots()["slot1"]["leased_by"], self.ME)
+        pub = h.client.published[-1]
+        self.assertEqual(pub["title"], "[me] " + Z("away.off.title"))
+        csock.close()
+
+    # 协议层的畸形请求：只带 slot，不带 leased_by。away_off 的提前告别要求这个槽位确实是发起方自己的，
+    # 不能只凭 slot 名就把告别推给别的项目——那个项目的释放本来就会被 active 拒绝，槽位没有变化
+    def test_away_off_named_slot_without_leased_by_does_not_announce_someone_elses_slot(self):
+        h = Harness(self)
+        h.state.acquire("proj:/w/other", pane="wD:p1")
+        sock, first, events = h.ask(leased_by="proj:/w/other", tag="other")  # slot1 挂着别的项目的提问
+        ev = h.request(cmd="release", slot="slot1", announce="away_off", tag="x")[0]
+        self.assertEqual((ev["event"], ev["kind"]), ("error", "active"))
+        self.assertNotIn("announced", ev)
+        self.assertEqual(len(h.client.published), 1)  # 只有提问卡，没有告别
+        self.assertEqual(h.state.slots()["slot1"]["leased_by"], "proj:/w/other")  # 没有被释放
+        sock.close()
+
+    def test_invalid_announce_value_is_rejected_without_crashing_the_daemon(self):
+        h = Harness(self)
+        h.state.acquire(self.ME, pane="wD:p1")
+        for bad in ["not-a-real-variant", ["release"], 1, True]:
+            ev = h.request(cmd="release", leased_by=self.ME, announce=bad, tag="me")[0]
+            self.assertEqual((ev["event"], ev["kind"]), ("error", "bad_request"), bad)
+        self.assertEqual(h.client.published, [])
+        self.assertEqual(h.state.slots()["slot1"]["leased_by"], self.ME)  # 全部拒绝，租约没被动过
+        self.assertEqual(h.request(cmd="status")[0]["event"], "status")  # daemon 还活着
+
+    def test_non_string_slot_is_rejected_without_crashing_the_daemon(self):
+        h = Harness(self)
+        ev = h.request(cmd="release", slot=["slot1"], leased_by=self.ME)[0]
+        self.assertEqual((ev["event"], ev["kind"]), ("error", "bad_request"))
+        self.assertEqual(h.request(cmd="status")[0]["event"], "status")  # daemon 还活着
+
+
+class NewLeaseOpeningNoticeTest(unittest.TestCase):
+    """_resolve_lease：远程模式开着（require_confirmed）时新租到的槽位，在本条 ask / notify 的消息推出之前先推一条与
+    away on 相同的开启通知；已有租约、require_confirmed 为假、或租约随后被退回的路径都不推。"""
+
+    ME = "proj:/w/me"
+
+    def test_fresh_confirmed_lease_sends_opening_notice_before_the_question(self):
+        h = Harness(self)
+        sock, first, events = h.ask(leased_by=self.ME, tag="me", require_confirmed=True, pane="wD:p1")
+        self.assertEqual(first["event"], "sent")
+        self.assertEqual(len(h.client.published), 2)
+        opening = h.client.published[0]
+        self.assertEqual(opening["title"], "[me] " + Z("away.on.title"))
+        self.assertIn(Z("away.on.body.full"), opening["message"])
+        self.assertIn(Z("notify.hint"), opening["message"])  # 与告别不同：开启通知保留「想回话」提示
+        question = h.client.published[1]
+        self.assertEqual(question["id"], first["id"])
+        sock.close()
+
+    def test_fresh_confirmed_lease_without_pane_uses_no_herdr_body(self):
+        h = Harness(self)
+        events = h.notify(leased_by=self.ME, tag="me", require_confirmed=True, pane=None)
+        self.assertEqual(events[0]["event"], "sent")
+        self.assertIn(Z("away.on.body.no_herdr"), h.client.published[0]["message"])
+
+    def test_fresh_confirmed_lease_when_daemon_cannot_find_herdr(self):
+        view = {"bin": None, "reachable": False, "error": "not found on PATH"}
+        h = Harness(self, herdr_view=lambda: view)
+        events = h.notify(leased_by=self.ME, tag="me", require_confirmed=True, pane="wD:p1")
+        self.assertEqual(events[0]["event"], "sent")
+        self.assertIn(Z("away.on.body.daemon_no_herdr"), h.client.published[0]["message"])
+
+    def test_existing_lease_does_not_send_opening_notice_again(self):
+        h = Harness(self)
+        h.state.acquire(self.ME, pane="wD:p1")
+        events = h.notify(leased_by=self.ME, tag="me", require_confirmed=True, pane="wD:p1")
+        self.assertEqual(events[0]["event"], "sent")
+        self.assertEqual(len(h.client.published), 1)  # 只有通知卡本身
+
+    def test_require_confirmed_false_does_not_send_opening_notice(self):
+        h = Harness(self)
+        events = h.notify(leased_by=self.ME, tag="me")  # 远程模式没开
+        self.assertEqual(events[0]["event"], "sent")
+        self.assertEqual(len(h.client.published), 1)
+
+    def test_busy_confirming_retreat_does_not_send_opening_notice(self):
+        h = Harness(self)
+        csock, cfirst, cevents = h.confirm("slot1", again=True)  # slot1 未租用但正在重新确认
+        sock, first, events = h.ask(leased_by=self.ME, tag="me", require_confirmed=True, pane="wD:p1")
+        self.assertEqual((first["event"], first["kind"]), ("error", "busy"))
+        self.assertEqual(h.client.published, [])
+        self.assertIsNone(h.state.slots()["slot1"]["leased_by"])  # 刚租到的已退回
+        sock.close()
+        csock.close()
+
+
 class NotifyTest(unittest.TestCase):
     """notify：与 ask 共用租约解析，但不占「提问中」、无按钮、一问一答即关。"""
 
@@ -678,6 +879,23 @@ class CommandsTest(unittest.TestCase):
         h = Harness(self)
         ev = h.request(cmd="lease")[0]
         self.assertEqual((ev["event"], ev["kind"]), ("error", "bad_request"))
+
+    def test_lease_with_non_string_leased_by_is_a_bad_request_not_a_crash(self):
+        # leased_by 从不会被当 dict key 用（_touch_pane 是逐值比较，不哈希），类型检查在它之前就已经挡住——
+        # 这条钉住的是「daemon 活着、稳定退 bad_request」这条不变式，防它在以后的改动里被削掉
+        h = Harness(self)
+        for bad in [["proj:/w/a"], {"x": 1}, 1, True]:
+            ev = h.request(cmd="lease", leased_by=bad)[0]
+            self.assertEqual((ev["event"], ev["kind"]), ("error", "bad_request"), bad)
+        self.assertEqual(h.request(cmd="status")[0]["event"], "status")  # daemon 还活着
+        self.assertEqual([r["leased_by"] for r in h.state.slots().values()], [None] * 5)  # 没有租约被建
+
+    def test_lease_with_non_string_pane_is_ignored_not_a_crash(self):
+        h = Harness(self)
+        ev = h.request(cmd="lease", leased_by="proj:/w/a", pane=["wD:p1"])[0]
+        self.assertEqual(ev["event"], "leased")
+        self.assertIsNone(h.state.slots()[ev["slot"]]["pane"])  # 非字符串当没在 herdr 里，不当值写进租约
+        self.assertEqual(h.request(cmd="status")[0]["event"], "status")
 
     def test_slots_release_status(self):
         h = Harness(self)
@@ -1834,6 +2052,58 @@ class TcpProtocolTest(ProtocolSmokeMixin, unittest.TestCase):
             ntfy_connector.send_request(sock, {"cmd": "status", "token": "x" * 32})
             self.assertEqual(list(ntfy_connector.read_events(sock))[0]["kind"], "unauthorized")
         self.assertEqual(h.request(cmd="status")[0]["event"], "status")  # 带对口令的照常
+
+
+class RequestFieldTypeSafetyTest(unittest.TestCase):
+    """release 之外的命令分支：请求字段类型不对时，daemon 回 bad_request 或忽略该字段，不会崩。"""
+
+    def test_ask_and_notify_reject_non_string_leased_by(self):
+        h = Harness(self)
+        for bad in [["proj:/w/a"], {"x": 1}, 1, True]:
+            sock, first, events = h.ask(leased_by=bad, tag="me")
+            self.assertEqual((first["event"], first["kind"]), ("error", "bad_request"), bad)
+            sock.close()
+            ev = h.notify(leased_by=bad, tag="me")[0]
+            self.assertEqual((ev["event"], ev["kind"]), ("error", "bad_request"), bad)
+        self.assertEqual(h.request(cmd="status")[0]["event"], "status")
+
+    def test_ask_rejects_non_numeric_timeout(self):
+        # True / False 也在这份列表里：bool 是 int 的子类，isinstance(True, (int, float)) 为真，
+        # 不专门排除的话 timeout=True 会被当成合法的 timeout=1；NaN / inf 是合法的 float，
+        # 但 NaN 比较恒假（timeout <= 0 也是假）、inf 让提问永远不超时，两者都要按有限正数挡掉
+        h = Harness(self)
+        for bad in [["30"], "30", None, True, False, float("nan"), float("inf"), float("-inf")]:
+            sock, first, events = h.ask(leased_by="proj:/w/a", tag="me", timeout=bad)
+            self.assertEqual((first["event"], first["kind"]), ("error", "bad_request"), bad)
+            sock.close()
+        self.assertEqual(h.request(cmd="status")[0]["event"], "status")
+
+    def test_ask_and_notify_tolerate_non_string_tag(self):
+        h = Harness(self)
+        sock, first, events = h.ask(leased_by="proj:/w/a", tag=["weird"])
+        self.assertEqual(first["event"], "sent")
+        self.assertEqual(h.client.published[-1]["title"], "[slot1] " + SAMPLE["title"])  # 非字符串退回槽位名
+        sock.close()
+        ev = h.notify(leased_by="proj:/w/b", tag={"x": 1})[0]
+        self.assertEqual(ev["event"], "sent")
+        self.assertEqual(h.client.published[-1]["title"], "[slot2] " + NOTIFY["title"])
+        self.assertEqual(h.request(cmd="status")[0]["event"], "status")
+
+    def test_confirm_sub_rejects_non_string_slot_and_non_numeric_timeout(self):
+        h = Harness(self)
+        for bad in [["slot1"], {"x": 1}, 1]:
+            ev = h.request(cmd="confirm-sub", slot=bad, timeout=30)[0]
+            self.assertEqual((ev["event"], ev["kind"]), ("error", "unknown_slot"), bad)
+        for bad in [["30"], "30", True, False, float("nan"), float("inf")]:
+            ev = h.request(cmd="confirm-sub", slot="slot1", timeout=bad)[0]
+            self.assertEqual((ev["event"], ev["kind"]), ("error", "bad_request"), bad)
+        self.assertEqual(h.request(cmd="status")[0]["event"], "status")
+
+    def test_slots_tolerates_non_string_leased_by(self):
+        h = Harness(self)
+        ev = h.request(cmd="slots", leased_by=["proj:/w/a"], pane="wD:p1")[0]
+        self.assertEqual(ev["event"], "slots")
+        self.assertEqual(h.request(cmd="status")[0]["event"], "status")
 
 
 if __name__ == "__main__":
