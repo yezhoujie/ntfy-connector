@@ -12,6 +12,30 @@ Versions before 0.2.0 were released inside the shared `agent-remote-communicatio
 and were tagged bare `vX.Y.Z`). This repository carries that history forward under one uniform scheme,
 `vX.Y.Z`; the entries below are unchanged from how they were written at the time.
 
+### [0.3.1] - 2026-09-24
+
+#### Added
+
+- `release` now pushes a farewell to the topic before it gives the slot back, while remote mode is on. When
+  remote mode is still on and a later `ask` / `notify` leases a topic again, that topic first receives the
+  same "on" notification as `away on`, then the message itself.
+
+#### Changed
+
+- `away off` sends its farewell through the same path, inside the daemon, instead of a separate `notify`
+  first: that `notify` leased a fresh topic when the project held none. The farewell still goes out while a
+  question is pending, since the switch turns off either way.
+- Farewells no longer end with "reply by sending a message in this topic" — they say messages here will no
+  longer be delivered. Other notifications keep the line.
+- When the running daemon is too old to send a farewell, the CLI says so and how to restart it.
+
+#### Fixed
+
+- `release <slot>` naming a slot nobody holds is refused before anything is sent.
+- A request whose `slot` is not a string, or whose `timeout` for `ask` / `confirm-sub` is a boolean, NaN or
+  infinite, is refused as a bad request. `true` used to count as one second, and NaN or infinity made the
+  wait never time out.
+
 ### [0.3.0] - 2026-09-23
 
 #### Added
@@ -250,6 +274,7 @@ relative to those untagged versions.
 - A missing `security` command (the keychain exists only on macOS) is reported as such, with the
   `AGENT_NTFY_STORE` alternatives, instead of as a socket error.
 
+[0.3.1]: https://github.com/yezhoujie/ntfy-connector/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/yezhoujie/ntfy-connector/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/yezhoujie/ntfy-connector/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/yezhoujie/ntfy-connector/compare/v0.1.2...v0.1.3
