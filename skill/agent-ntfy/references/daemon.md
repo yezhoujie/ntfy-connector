@@ -128,7 +128,9 @@ settled while the human is still at the keyboard. Outside remote mode `ask` and 
 automatically when the project holds none; **with remote mode on they only use confirmed slots** (`away:
 true` in the state file). Leases have **no TTL and are never reclaimed**; release yours when your task ends
 (`ntfy-connector release` with no argument releases the slot leased by the current project; `away off` does the
-same). A lease is exclusive and belongs to its project until that project releases it: `release <slot>`
+same). While remote mode is on, both push a farewell to that topic before the slot is
+given back; a later `ask` / `notify` that leases a topic again first pushes the
+same notification as `away on`, then its own message. A lease is exclusive and belongs to its project until that project releases it: `release <slot>`
 carries the caller's project identity and refuses another project's slot (`not_yours`, rc 4) — one session
 never ends another's remote mode. Once no usable slot is free, `ask` / `notify` / `away on` exit 4 with the
 occupancy (holder, idle or question pending, confirmed or not, one line per slot; see
