@@ -293,12 +293,21 @@ remote mode. `away status` asks the daemon for its leases and corrects the file 
 prints `state file corrected from the daemon's leases`); with no daemon it prints the file and says so. The topic name is never stored there. While
 `away` is `true`, `ask` and `notify` only use confirmed slots — nobody is at the keyboard to confirm a new one.
 
-The phone also gets a notification on its own each time the switch flips: `away on` sends one once a
+The phone also gets a notification on its own in a few more cases: `away on` sends one once a
 confirmed slot actually backs it, worded to say whether messages you send on your own reach the terminal
 (it depends on whether the agent is inside herdr, and whether the daemon can find herdr on its PATH);
-`away off` sends one just before it releases the lease, telling you to continue from the terminal. Neither
-notification needs anything from you, and a failure to send one never changes the exit code or the state
-file — it only adds a line to the agent's stderr.
+`away off` sends one just before it releases the lease, telling you to continue from the terminal; and
+while remote mode is on, releasing this project's slot with plain `release` sends the same kind of
+farewell first, telling you this topic is about to go back to the pool. None of these three need anything
+from you, and a failure to send one never changes the exit code, the release, or the state file — it just
+adds a line to the agent's stderr (or, if the daemon predates this feature and does not even recognize the
+request, a line telling the agent to restart it).
+
+If remote mode is still on but this project currently holds no slot, the next question or notice that
+leases a fresh confirmed slot pushes the `away on` opening notification before it goes out, even though
+nobody ran `away on` again by hand. Unlike the three above, a failure to send that one is not surfaced on
+the agent's stderr — it only goes into the daemon's own log — and it never affects the question or notice
+it was about to send.
 
 Run `away status --json` (the form meant for the agent) from the agent's herdr pane or a process started
 from it: like `ask` / `notify` / `slots` it records the current pane on the lease, and run from elsewhere it would point

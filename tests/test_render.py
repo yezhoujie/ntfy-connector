@@ -314,6 +314,18 @@ class RenderNotifyTest(unittest.TestCase):
         self.assertNotIn("按钮", r.message)
         self.assertEqual(r.message.count(SEP), 1)
 
+    def test_notify_hint_can_be_suppressed(self):
+        # 告别类通知（release / away off）用：body 原样，不拼分隔线与「想回话」提示；notify_message 同一开关
+        r = render.render_notify(NOTIFY, tag="wD", lang="zh", hint=False)
+        self.assertEqual(r.message, NOTIFY["body"])
+        self.assertNotIn(SEP.strip(), r.message)
+        self.assertNotIn(NOTIFY_HINT["zh"], r.message)
+        self.assertEqual(r.body, NOTIFY["body"])
+        self.assertEqual(render.notify_message(NOTIFY, "en", hint=False), NOTIFY["body"])
+        # 缺省（未传 hint，或显式 True）行为不变
+        self.assertEqual(render.render_notify(NOTIFY, tag="wD", lang="zh").message, NOTIFY["body"] + SEP + NOTIFY_HINT["zh"])
+        self.assertEqual(render.render_notify(NOTIFY, tag="wD", lang="zh", hint=True).message, NOTIFY["body"] + SEP + NOTIFY_HINT["zh"])
+
     def test_notify_english(self):
         r = render.render_notify({**NOTIFY, "title": "Tests green", "body": "done"}, tag="proj", lang="en")
         self.assertEqual(r.title, "[proj] Tests green")

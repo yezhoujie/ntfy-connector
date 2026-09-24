@@ -183,17 +183,22 @@ def render_question(payload: dict, *, tag: str, reply_url: str, lang: str) -> Re
     )
 
 
-def render_notify(payload: dict, *, tag: str, lang: str) -> Rendered:
+def render_notify(payload: dict, *, tag: str, lang: str, hint: bool = True) -> Rendered:
     """通知卡：agent 单向通报，没有按钮、不等回复。Title 同提问（[<tag>] <title>）；正文 = agent 给的 Markdown 正文 +
-    分隔线 + 一句「想回话直接在这个 topic 发消息」（不带提问卡那段按钮提示——这张卡上没有按钮）。body 字段 = 原正文。"""
+    分隔线 + 一句「想回话直接在这个 topic 发消息」（不带提问卡那段按钮提示——这张卡上没有按钮）。body 字段 = 原正文。
+    hint=False 用于系统自己发的告别通知（release / away off）：那类卡片正文已经说了这个 topic 不再送达，
+    再拼一句「想回话直接在这个 topic 发消息」自相矛盾，连同分隔线一起去掉；agent 发的普通通知不受影响。"""
     body = _text(payload, "body")
-    return Rendered(title=render_title(payload, tag), message=notify_message(payload, lang), actions=[], body=body, lang=lang)
+    return Rendered(title=render_title(payload, tag), message=notify_message(payload, lang, hint=hint), actions=[], body=body, lang=lang)
 
 
-def notify_message(payload: dict, lang: str) -> str:
+def notify_message(payload: dict, lang: str, *, hint: bool = True) -> str:
     """通知卡的完整正文。校验层量的就是它的字节数（与 Title 里的 tag 无关）。
     body 去掉首尾空白再拼：首行缩进四个空格在 Markdown 里是代码块，尾部空行会把分隔线前的空行撑多。"""
-    return f"{_text(payload, 'body').strip()}\n\n{SEPARATOR}\n\n{texts.t('notify.hint', lang)}"
+    body = _text(payload, "body").strip()
+    if not hint:
+        return body
+    return f"{body}\n\n{SEPARATOR}\n\n{texts.t('notify.hint', lang)}"
 
 
 def notify_bytes(payload: dict, lang: str) -> int:
