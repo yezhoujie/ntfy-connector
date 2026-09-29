@@ -56,7 +56,7 @@ agent ──ask (JSON on stdin)──▶ ntfy-connector ──local socket──
 - The [ntfy app](https://ntfy.sh) on your phone; no ntfy.sh account needed. Tested on Android (MIUI). **iOS users: see §2.2** — the iOS app receives notifications but has no reply box, so use the web app for replying
 - Outbound HTTPS to `ntfy.sh` (or your own instance). The daemon does **not** read `http_proxy` / `https_proxy` or the system proxy; a TUN-style VPN that is transparent to processes is fine
 - A POSIX shell for the examples in this file and in SKILL.md (`$(...)`, heredocs, `alias`). On Windows that means Git Bash or WSL; the daemon and the CLI themselves run natively (the interpreter is usually `python` there, not `python3`)
-- [herdr](https://herdr.dev), recommended — see below
+- [herdr](https://herdr.dev), strongly recommended — see below
 
 ### 2.1 Platform support
 
@@ -68,9 +68,9 @@ agent ──ask (JSON on stdin)──▶ ntfy-connector ──local socket──
 
 ¹ On Windows `shutdown()` does not wake a thread blocked in `recv()`, so the daemon waits 0.2 s for it before closing the socket for real.
 
-### herdr: install it first if you can, and what works without it
+### herdr: strongly recommended, and what still works without it
 
-[herdr](https://herdr.dev) is the terminal multiplexer this skill uses to deliver text *into* an agent's session (`brew install herdr` on macOS / Linux; see https://herdr.dev for other platforms). It is the only piece that is optional, and this is exactly what you keep and lose without it:
+[herdr](https://herdr.dev) is the terminal multiplexer this skill uses to deliver text *into* an agent's session (`brew install herdr` on macOS / Linux; see https://herdr.dev for other platforms). **Install it** — it is strongly recommended. Without it, questions and notifications still work, but nothing you send on your own reaches the agent; this is exactly what you keep and lose:
 
 | works without herdr | needs herdr |
 |---|---|
