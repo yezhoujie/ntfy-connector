@@ -52,7 +52,7 @@ agent ──ask（stdin 里的 JSON）──▶ ntfy-connector ──本机 sock
 - 手机上装 [ntfy app](https://ntfy.sh)；不需要 ntfy.sh 账号。实测环境是 Android（MIUI）。**iPhone 用户看 §2.2**——iOS 版 app 只能收通知、没有输入框，回话要用网页版
 - 能出站 HTTPS 访问 `ntfy.sh`（或你自建的实例）。daemon **不读** `http_proxy` / `https_proxy` 与系统代理；对进程透明的 TUN 型 VPN 可以
 - 本文与 SKILL.md 里的示例是 POSIX shell 形态（`$(...)`、heredoc、`alias`）。Windows 上请在 Git Bash 或 WSL 里跑这些命令；daemon 与 CLI 本身原生可跑（那里的解释器通常叫 `python` 而不是 `python3`）
-- [herdr](https://herdr.dev)，推荐——见下
+- [herdr](https://herdr.dev)，强烈推荐安装——见下
 
 ### 2.1 平台支持
 
@@ -64,9 +64,9 @@ agent ──ask（stdin 里的 JSON）──▶ ntfy-connector ──本机 sock
 
 ¹ Windows 上 `shutdown()` 叫不醒阻塞在 `recv()` 的线程，daemon 等它 0.2 秒后才真正关掉 socket。
 
-### herdr：能装就先装；不装的话哪些能用、哪些不能
+### herdr：强烈推荐安装；不装的话哪些能用、哪些不能
 
-[herdr](https://herdr.dev) 是本 skill 用来把文字送*进* agent 会话的终端复用器（macOS / Linux 上 `brew install herdr`；其他平台见 https://herdr.dev）。它是唯一可选的一环，不装时留下什么、失去什么如下：
+[herdr](https://herdr.dev) 是本 skill 用来把文字送*进* agent 会话的终端复用器（macOS / Linux 上 `brew install herdr`；其他平台见 https://herdr.dev）。**强烈推荐安装**：不装时提问和通知照常可用，但你主动发的任何消息都送不到 agent；留下什么、失去什么如下：
 
 | 不装 herdr 也能用 | 必须有 herdr |
 |---|---|
